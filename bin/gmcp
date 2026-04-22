@@ -2,6 +2,10 @@
 
 require_relative '../lib/gmcp'
 
-# TODO: start stdio MCP server via GMCP::Server.
-# GMCP::Server.run(account: ENV['GMCP_ACCOUNT'])
-abort 'GMCP server not yet implemented — see SKETCH.md'
+account = ENV['GMCP_ACCOUNT'] or abort 'Set GMCP_ACCOUNT to the Google account to use'
+
+begin
+  GMCP::Server.run!(account: account)
+rescue GMCP::Auth::AuthRequired => e
+  abort e.message
+end

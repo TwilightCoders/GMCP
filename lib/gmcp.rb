@@ -1,4 +1,6 @@
 require 'pathname'
+require 'base64'
+require 'fileutils'
 
 require_relative 'gmcp/version'
 
@@ -7,8 +9,10 @@ module GMCP
     (@root ||= Pathname.new(File.expand_path('../', __dir__))).join(*args)
   end
 
-  autoload :Auth,     'gmcp/auth'
-  autoload :Server,   'gmcp/server'
+  autoload :Auth,             'gmcp/auth'
+  autoload :BearerMiddleware, 'gmcp/bearer_middleware'
+  autoload :Apis,             'gmcp/apis'
+  autoload :Server,           'gmcp/server'
 
   module Gmail
     autoload :Message, 'gmcp/gmail/message'
