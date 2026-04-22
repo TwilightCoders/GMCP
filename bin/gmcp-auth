@@ -1,0 +1,45 @@
+#!/usr/bin/env ruby
+
+require_relative '../lib/gmcp'
+
+# Usage:
+#   gmcp-auth <account>          — print authorization URL, wait for code
+#   gmcp-auth <account> <code>   — exchange code for token and persist
+
+account = ARGV[0] or abort "Usage: #{File.basename($0)} <account> [code]"
+code    = ARGV[1]
+
+require 'googleauth'
+require 'googleauth/stores/file_token_store'
+require 'fileutils'
+
+credentials_path = ENV.fetch('GMCP_CREDENTIALS_FILE', GMCP::Auth::CREDENTIALS_PATH)
+token_path       = GMCP::Auth.token_path(account)
+
+unless File.exist?(credentials_path)
+  abort "credentials.json not found at #{credentials_path}\n" \
+        "Download it from https://console.cloud.google.com/ → APIs & Services → Credentials"
+end
+
+FileUtils.mkdir_p(File.dirname(token_path))
+store       = Google::Auth::Stores::FileTokenStore.new(file: token_path)
+client_id   = Google::Auth::ClientId.from_file(credentials_path)
+authorizer  = Google::Auth::UserAuthorizer.new(client_id, GMCP::Auth.scopes, store)
+
+if code
+  creds = authorizer.get_and_store_credentials_from_code(
+    user_id:  account,
+    code:     code,
+    base_url: 'urn:ietf:wg:oauth:2.0:oob'
+  )
+  puts "Token stored for #{account} → #{token_path}"
+  puts "Access token expires: #{creds.expires_at}"
+else
+  url = authorizer.get_authorization_url(base_url: 'urn:ietf:wg:oauth:2.0:oob')
+  puts "Open this URL in your browser to authorize #{account}:"
+  puts
+  puts "  #{url}"
+  puts
+  puts "Then run:"
+  puts "  #{File.basename($0)} #{account} <code>"
+end

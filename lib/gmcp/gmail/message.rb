@@ -6,27 +6,43 @@ module GMCP
       collection_path '/messages'
       primary_key :id
 
-      attributes :id, :threadId, :labelIds, :snippet, :payload, :sizeEstimate, :historyId, :internalDate
+      parse_root_in_json true
+      root_element :messages
 
-      custom_post :trash, :untrash
+      attributes :id, :threadId, :labelIds, :snippet, :payload,
+                 :sizeEstimate, :historyId, :internalDate
+
+      def trash!
+        self.class.post_raw("/messages/#{id}/trash", {})
+      end
+
+      def untrash!
+        self.class.post_raw("/messages/#{id}/untrash", {})
+      end
 
       def archive!
         modify!(removeLabelIds: ['INBOX'])
       end
 
-      def label!(add: [], remove: [])
-        modify!(addLabelIds: Array(add), removeLabelIds: Array(remove))
-      end
-
-      def modify!(add_label_ids: [], remove_label_ids: [], addLabelIds: nil, removeLabelIds: nil)
+      def modify!(addLabelIds: [], removeLabelIds: [])
         self.class.post_raw("/messages/#{id}/modify", {
-          addLabelIds:    addLabelIds    || add_label_ids,
-          removeLabelIds: removeLabelIds || remove_label_ids
+          addLabelIds:    addLabelIds,
+          removeLabelIds: removeLabelIds
         })
       end
 
-      def reply!(body:, subject: nil)
-        self.class.post_raw('/messages/send', draft_payload(body: body, subject: subject, thread_id: threadId, reply_to_id: id))
+      def reply!(body:)
+        headers = payload&.dig('headers') || []
+        subject   = headers.find { |h| h['name'] == 'Subject' }&.fetch('value', '') || ''
+        reply_sub = subject.start_with?('Re:') ? subject : "Re: #{subject}"
+        from      = headers.find { |h| h['name'] == 'From' }&.fetch('value', '') || ''
+        raw = "To: #{from}\r\nSubject: #{reply_sub}\r\n" \
+              "In-Reply-To: #{id}\r\nReferences: #{id}\r\n" \
+              "Content-Type: text/plain\r\n\r\n#{body}"
+        self.class.post_raw('/messages/send', {
+          raw:      Base64.urlsafe_encode64(raw),
+          threadId: threadId
+        })
       end
 
       class << self
@@ -35,14 +51,8 @@ module GMCP
         end
 
         def send_message(to:, subject:, body:)
-          post_raw('/messages/send', mime_payload(to: to, subject: subject, body: body))
-        end
-
-        private
-
-        def mime_payload(to:, subject:, body:)
           raw = "To: #{to}\r\nSubject: #{subject}\r\nContent-Type: text/plain\r\n\r\n#{body}"
-          { raw: Base64.urlsafe_encode64(raw) }
+          post_raw('/messages/send', { raw: Base64.urlsafe_encode64(raw) })
         end
       end
     end

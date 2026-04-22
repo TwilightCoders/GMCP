@@ -6,15 +6,19 @@ module GMCP
       collection_path '/calendars/primary/events'
       primary_key :id
 
+      parse_root_in_json true
+      root_element :items
+
       attributes :id, :summary, :description, :start, :end, :location,
                  :attendees, :status, :organizer, :recurringEventId, :htmlLink
 
       def rsvp!(response)
-        me = attendees&.find { |a| a['self'] }
+        me = attendees&.find { |a| a['self'] || a[:self] }
         return unless me
-        self.class.put_raw("/calendars/primary/events/#{id}", {
-          attendees: attendees.map { |a| a['self'] ? a.merge('responseStatus' => response.to_s) : a }
-        })
+        updated = attendees.map do |a|
+          (a['self'] || a[:self]) ? a.merge('responseStatus' => response.to_s) : a
+        end
+        self.class.put_raw("/calendars/primary/events/#{id}", { attendees: updated })
       end
 
       class << self
@@ -27,6 +31,14 @@ module GMCP
 
         def create_event(calendar_id: 'primary', **attrs)
           post_raw("/calendars/#{calendar_id}/events", attrs)
+        end
+
+        def update_event(event_id:, calendar_id: 'primary', **attrs)
+          patch_raw("/calendars/#{calendar_id}/events/#{event_id}", attrs)
+        end
+
+        def delete_event(event_id:, calendar_id: 'primary')
+          delete_raw("/calendars/#{calendar_id}/events/#{event_id}", {})
         end
       end
     end

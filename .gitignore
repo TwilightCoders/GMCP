@@ -13,7 +13,6 @@
 
 # Local config
 .env
-.ruby-version
 
 # Secrets — OAuth client credentials and persisted tokens
 /credentials.json

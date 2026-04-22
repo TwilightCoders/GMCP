@@ -19,10 +19,10 @@ module GMCP
           description: 'List events from a calendar within an optional time range',
           input_schema: {
             properties: {
-              calendar_id:  { type: 'string', description: 'Calendar ID (default: primary)' },
-              time_min:     { type: 'string', description: 'RFC3339 start of range, e.g. 2025-01-01T00:00:00Z' },
-              time_max:     { type: 'string', description: 'RFC3339 end of range' },
-              max_results:  { type: 'integer' }
+              calendar_id: { type: 'string', description: 'Calendar ID (default: primary)' },
+              time_min:    { type: 'string', description: 'RFC3339 start of range, e.g. 2025-01-01T00:00:00Z' },
+              time_max:    { type: 'string', description: 'RFC3339 end of range' },
+              max_results: { type: 'integer' }
             },
             required: []
           }
@@ -53,20 +53,20 @@ module GMCP
           input_schema: {
             properties: {
               summary:     { type: 'string' },
-              start:       { type: 'string', description: 'RFC3339 datetime, e.g. 2025-06-01T10:00:00-07:00' },
-              end:         { type: 'string', description: 'RFC3339 datetime' },
+              start_time:  { type: 'string', description: 'RFC3339 datetime, e.g. 2025-06-01T10:00:00-07:00' },
+              end_time:    { type: 'string', description: 'RFC3339 datetime' },
               description: { type: 'string' },
               location:    { type: 'string' },
               attendees:   { type: 'array', items: { type: 'string' }, description: 'Email addresses' },
               calendar_id: { type: 'string' }
             },
-            required: ['summary', 'start', 'end']
+            required: ['summary', 'start_time', 'end_time']
           }
-        ) do |summary:, start:, end:, description: nil, location: nil, attendees: [], calendar_id: 'primary'|
+        ) do |summary:, start_time:, end_time:, description: nil, location: nil, attendees: [], calendar_id: 'primary'|
           attrs = {
-            summary: summary,
-            start:   { dateTime: start },
-            end:     { dateTime: binding.local_variable_get(:end) },
+            summary:   summary,
+            start:     { dateTime: start_time },
+            end:       { dateTime: end_time },
             attendees: attendees.map { |e| { email: e } }
           }
           attrs[:description] = description if description
@@ -76,12 +76,53 @@ module GMCP
         end
 
         server.define_tool(
+          name: 'calendar_update_event',
+          description: 'Update fields on an existing calendar event',
+          input_schema: {
+            properties: {
+              event_id:    { type: 'string' },
+              summary:     { type: 'string' },
+              start_time:  { type: 'string', description: 'RFC3339 datetime' },
+              end_time:    { type: 'string', description: 'RFC3339 datetime' },
+              description: { type: 'string' },
+              location:    { type: 'string' },
+              calendar_id: { type: 'string' }
+            },
+            required: ['event_id']
+          }
+        ) do |event_id:, calendar_id: 'primary', summary: nil, start_time: nil, end_time: nil, description: nil, location: nil|
+          attrs = {}
+          attrs[:summary]     = summary                      if summary
+          attrs[:start]       = { dateTime: start_time }    if start_time
+          attrs[:end]         = { dateTime: end_time }      if end_time
+          attrs[:description] = description                  if description
+          attrs[:location]    = location                     if location
+          Event.update_event(event_id: event_id, calendar_id: calendar_id, **attrs)
+          MCP::Tool::Response.new([{ type: 'text', text: "Event #{event_id} updated." }])
+        end
+
+        server.define_tool(
+          name: 'calendar_delete_event',
+          description: 'Delete a calendar event',
+          input_schema: {
+            properties: {
+              event_id:    { type: 'string' },
+              calendar_id: { type: 'string' }
+            },
+            required: ['event_id']
+          }
+        ) do |event_id:, calendar_id: 'primary'|
+          Event.delete_event(event_id: event_id, calendar_id: calendar_id)
+          MCP::Tool::Response.new([{ type: 'text', text: "Event #{event_id} deleted." }])
+        end
+
+        server.define_tool(
           name: 'calendar_rsvp',
           description: 'RSVP to a calendar event (accepted, declined, tentative)',
           input_schema: {
             properties: {
               event_id: { type: 'string' },
-              response:  { type: 'string', enum: %w[accepted declined tentative] }
+              response: { type: 'string', enum: %w[accepted declined tentative] }
             },
             required: ['event_id', 'response']
           }

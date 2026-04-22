@@ -6,6 +6,9 @@ module GMCP
       collection_path '/files'
       primary_key :id
 
+      parse_root_in_json true
+      root_element :files
+
       attributes :id, :name, :mimeType, :description, :parents, :size,
                  :webViewLink, :webContentLink, :createdTime, :modifiedTime
 
@@ -20,7 +23,7 @@ module GMCP
         end
 
         def download(file_id)
-          get_raw("/files/#{file_id}", { alt: 'media' }) do |data, _response|
+          get_raw("/files/#{file_id}", alt: 'media') do |data, _response|
             data
           end
         end

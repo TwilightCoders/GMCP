@@ -6,9 +6,18 @@ module GMCP
       collection_path '/threads'
       primary_key :id
 
+      parse_root_in_json true
+      root_element :threads
+
       attributes :id, :snippet, :historyId, :messages
 
-      custom_post :trash, :untrash
+      def trash!
+        self.class.post_raw("/threads/#{id}/trash", {})
+      end
+
+      def untrash!
+        self.class.post_raw("/threads/#{id}/untrash", {})
+      end
 
       def archive!
         self.class.post_raw("/threads/#{id}/modify", { removeLabelIds: ['INBOX'] })

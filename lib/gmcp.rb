@@ -1,6 +1,7 @@
 require 'pathname'
 require 'base64'
 require 'fileutils'
+require 'him'
 
 require_relative 'gmcp/version'
 

@@ -57,7 +57,7 @@ module GMCP
             required: ['message_id']
           }
         ) do |message_id:|
-          Message.trash(id: message_id)
+          Message.find(message_id).trash!
           MCP::Tool::Response.new([{ type: 'text', text: "Message #{message_id} moved to trash." }])
         end
 

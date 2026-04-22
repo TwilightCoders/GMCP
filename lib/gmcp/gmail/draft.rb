@@ -6,9 +6,14 @@ module GMCP
       collection_path '/drafts'
       primary_key :id
 
+      parse_root_in_json true
+      root_element :drafts
+
       attributes :id, :message
 
-      custom_post :send
+      def send!
+        self.class.post_raw("/drafts/#{id}/send", {})
+      end
 
       class << self
         def create_draft(to:, subject:, body:)

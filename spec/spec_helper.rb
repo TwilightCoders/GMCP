@@ -1,5 +1,5 @@
 require 'gmcp'
-require 'pry'
+require 'pry-byebug'
 
 RSpec.configure do |config|
   config.order = 'random'

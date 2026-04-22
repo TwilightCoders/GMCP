@@ -22,8 +22,9 @@ module GMCP
 
     def self.build_api(base_url, token)
       Him::API.new(url: base_url) do |conn|
+        conn.request :json                          # Encode request body as JSON
         conn.use BearerMiddleware, token: token
-        conn.use Him::Middleware::DefaultParseJSON
+        conn.use Him::Middleware::DefaultParseJSON   # Wrap response under :data/:errors/:metadata
         conn.adapter Faraday.default_adapter
       end
     end
