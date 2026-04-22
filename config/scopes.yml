@@ -1,0 +1,11 @@
+# OAuth scope definitions per service.
+# Used by GMCP::Auth when requesting consent.
+
+gmail:
+  - https://www.googleapis.com/auth/gmail.modify
+
+calendar:
+  - https://www.googleapis.com/auth/calendar.events
+
+drive:
+  - https://www.googleapis.com/auth/drive.readonly

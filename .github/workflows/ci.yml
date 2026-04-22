@@ -1,0 +1,241 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop, release/**]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  actions: write
+  contents: read
+  id-token: write
+  packages: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby-version: ["2.7", "3.0", "3.1", "3.2", "3.3"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby ${{ matrix.ruby-version }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby-version }}
+          bundler-cache: true
+
+      - name: Run tests with coverage
+        run: bundle exec rspec
+
+      - name: Test CLI
+        run: bundle exec bin/gemplate --help
+
+      - name: Upload coverage artifact (Ruby 3.3 only)
+        if: matrix.ruby-version == '3.3'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 1
+
+      - name: Run RuboCop (Ruby 3.3 only)
+        if: matrix.ruby-version == '3.3'
+        run: bundle exec rubocop || true
+        continue-on-error: true
+
+  coverage:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+
+      - name: Upload coverage to Qlty
+        uses: qltysh/qlty-action/coverage@v1
+        continue-on-error: true
+        env:
+          QLTY_COVERAGE_TOKEN: ${{ secrets.QLTY_COVERAGE_TOKEN }}
+        with:
+          oidc: true
+          files: coverage/coverage.json
+
+      - name: Run Qlty code quality checks
+        run: |
+          curl -sSfL https://qlty.sh | sh
+          echo "$HOME/.qlty/bin" >> $GITHUB_PATH
+          ~/.qlty/bin/qlty check || true
+        continue-on-error: true
+
+  security:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+
+      - name: Run bundle audit
+        run: |
+          gem install bundler-audit
+          bundle audit --update || true
+        continue-on-error: true
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [test, coverage, security]
+    if: github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+
+      - name: Modify version for develop branch
+        if: github.ref == 'refs/heads/develop'
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          sed -i "s/VERSION = '\([^']*\)'/VERSION = '\1.dev.${SHORT_SHA}'/" lib/gemplate/version.rb
+          echo "VERSION_SUFFIX=.dev.${SHORT_SHA}" >> $GITHUB_ENV
+
+      - name: Modify version for release branch
+        if: startsWith(github.ref, 'refs/heads/release/')
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          sed -i "s/VERSION = '\([^']*\)'/VERSION = '\1.rc.${SHORT_SHA}'/" lib/gemplate/version.rb
+          echo "VERSION_SUFFIX=.rc.${SHORT_SHA}" >> $GITHUB_ENV
+
+      - name: Set version suffix for main
+        if: github.ref == 'refs/heads/main'
+        run: echo "VERSION_SUFFIX=" >> $GITHUB_ENV
+
+      - name: Build gem
+        run: gem build gemplate.gemspec
+
+      - name: Get gem info
+        id: gem_info
+        run: |
+          GEM_FILE=$(ls *.gem)
+          GEM_VERSION=$(echo $GEM_FILE | sed 's/gemplate-\(.*\)\.gem/\1/')
+          echo "gem_file=$GEM_FILE" >> $GITHUB_OUTPUT
+          echo "gem_version=$GEM_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Store gem artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gem-${{ steps.gem_info.outputs.gem_version }}
+          path: "*.gem"
+          retention-days: 30
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://github.com/yourusername/gmcp/packages
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+
+      - name: Download gem artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: gem-*
+          merge-multiple: true
+
+      - name: Show deployment details
+        run: |
+          echo "## 🚀 Ready to Deploy" >> $GITHUB_STEP_SUMMARY
+          echo "**Gem**: $(ls *.gem)" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Size**: $(ls -lh *.gem | awk '{print $5}')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Manual Approval Required" >> $GITHUB_STEP_SUMMARY
+          echo "This deployment uses the \`production\` environment and can require manual approval." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**To enable manual approval:**" >> $GITHUB_STEP_SUMMARY
+          echo "1. Go to **Settings** → **Environments** → **production**" >> $GITHUB_STEP_SUMMARY
+          echo "2. Enable **Required reviewers** and add yourself" >> $GITHUB_STEP_SUMMARY
+          echo "3. Optionally enable **Wait timer** for additional safety" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📖 **See:** [GitHub Docs - Reviewing Deployments](https://docs.github.com/en/actions/managing-workflow-runs-and-deployments/managing-deployments/reviewing-deployments)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Once configured, you'll get a **Review deployments** button to approve/reject releases." >> $GITHUB_STEP_SUMMARY
+
+      - name: Publish to GitHub Packages
+        id: publish
+        continue-on-error: true
+        run: |
+          mkdir -p ~/.gem
+          cat << EOF > ~/.gem/credentials
+          ---
+          :github: Bearer ${{ secrets.GITHUB_TOKEN }}
+          EOF
+          chmod 600 ~/.gem/credentials
+
+          # Try to publish, capturing output
+          if gem push --key github --host https://rubygems.pkg.github.com/TwilightCoders *.gem 2>&1 | tee publish_output.log; then
+            echo "success=true" >> $GITHUB_OUTPUT
+            echo "message=Successfully published $(ls *.gem)" >> $GITHUB_OUTPUT
+          else
+            # Check if it's a version conflict (common scenario)
+            if grep -q "already exists" publish_output.log || grep -q "Repushing of gem versions is not allowed" publish_output.log; then
+              echo "success=false" >> $GITHUB_OUTPUT
+              echo "message=Version $(ls *.gem) already exists in GitHub Packages - no action needed" >> $GITHUB_OUTPUT
+            else
+              echo "success=false" >> $GITHUB_OUTPUT
+              echo "message=Failed to publish: $(cat publish_output.log)" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Deployment summary
+        run: |
+          if [ "${{ steps.publish.outputs.success }}" == "true" ]; then
+            echo "## ✅ Deployment Complete" >> $GITHUB_STEP_SUMMARY
+            echo "${{ steps.publish.outputs.message }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ⚠️ Deployment Skipped" >> $GITHUB_STEP_SUMMARY
+            echo "${{ steps.publish.outputs.message }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "This is typically expected when the version already exists." >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Create build summary
+        run: |
+          echo "## Gem Built Successfully 💎" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ steps.gem_info.outputs.gem_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **File**: ${{ steps.gem_info.outputs.gem_file }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🚀 **Ready to publish!** Use the 'Manual Release' workflow to publish this gem." >> $GITHUB_STEP_SUMMARY

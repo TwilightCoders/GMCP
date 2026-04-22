@@ -1,0 +1,24 @@
+*.gem
+/pkg/
+/coverage/
+/Gemfile.lock
+/.bundle/
+/.rspec_status
+/tmp/
+
+# OS / editor
+.DS_Store
+.idea/
+.ruby-lsp/
+
+# Local config
+.env
+.ruby-version
+
+# Secrets — OAuth client credentials and persisted tokens
+/credentials.json
+/token.json
+
+# Claude
+.claude/
+CLAUDE.md

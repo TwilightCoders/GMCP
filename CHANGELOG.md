@@ -1,0 +1,4 @@
+# GMCP
+
+## [Unreleased]
+- Initial scaffold.

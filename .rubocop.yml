@@ -1,0 +1,51 @@
+AllCops:
+  TargetRubyVersion: 2.7
+  NewCops: enable
+  Exclude:
+    - "vendor/**/*"
+    - "tmp/**/*"
+    - "coverage/**/*"
+
+# Disable some common rules for gem development
+Layout/LineLength:
+  Max: 120
+
+Style/Documentation:
+  Enabled: false
+
+Metrics/MethodLength:
+  Max: 20
+  Exclude:
+    - lib/gemplate/generator.rb # Generator methods legitimately need to be longer
+    - spec/**/* # Test methods can be longer for readability
+
+Metrics/ClassLength:
+  Max: 250
+  Exclude:
+    - lib/gemplate/generator.rb # Generator class is complex by nature
+
+Metrics/AbcSize:
+  Max: 25
+  Exclude:
+    - lib/gemplate/generator.rb
+
+Metrics/CyclomaticComplexity:
+  Max: 12
+  Exclude:
+    - lib/gemplate/generator.rb
+
+Metrics/PerceivedComplexity:
+  Max: 12
+  Exclude:
+    - lib/gemplate/generator.rb
+
+Metrics/BlockLength:
+  Exclude:
+    - spec/**/*
+    - "*.gemspec"
+
+Style/StringLiterals:
+  EnforcedStyle: single_quotes
+
+Layout/TrailingEmptyLines:
+  EnforcedStyle: final_newline
