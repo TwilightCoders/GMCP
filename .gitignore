@@ -21,3 +21,6 @@
 # Claude
 .claude/
 CLAUDE.md
+
+# Codex scratch docs / local agent artifacts
+.Codex/

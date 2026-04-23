@@ -3,7 +3,7 @@ module GMCP
     class Event
       include Him::Model
 
-      collection_path '/calendars/primary/events'
+      collection_path 'calendars/primary/events'
       primary_key :id
 
       parse_root_in_json true
@@ -18,7 +18,7 @@ module GMCP
         updated = attendees.map do |a|
           (a['self'] || a[:self]) ? a.merge('responseStatus' => response.to_s) : a
         end
-        self.class.put_raw("/calendars/primary/events/#{id}", { attendees: updated })
+        self.class.put_raw("calendars/primary/events/#{id}", { attendees: updated })
       end
 
       class << self
@@ -26,19 +26,19 @@ module GMCP
           params = { maxResults: max_results, singleEvents: true, orderBy: 'startTime' }
           params[:timeMin] = time_min if time_min
           params[:timeMax] = time_max if time_max
-          get_collection("/calendars/#{calendar_id}/events", params)
+          get_collection("calendars/#{calendar_id}/events", params)
         end
 
         def create_event(calendar_id: 'primary', **attrs)
-          post_raw("/calendars/#{calendar_id}/events", attrs)
+          post_raw("calendars/#{calendar_id}/events", attrs)
         end
 
         def update_event(event_id:, calendar_id: 'primary', **attrs)
-          patch_raw("/calendars/#{calendar_id}/events/#{event_id}", attrs)
+          patch_raw("calendars/#{calendar_id}/events/#{event_id}", attrs)
         end
 
         def delete_event(event_id:, calendar_id: 'primary')
-          delete_raw("/calendars/#{calendar_id}/events/#{event_id}", {})
+          delete_raw("calendars/#{calendar_id}/events/#{event_id}", {})
         end
       end
     end

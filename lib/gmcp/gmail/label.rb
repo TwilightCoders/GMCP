@@ -3,7 +3,7 @@ module GMCP
     class Label
       include Him::Model
 
-      collection_path '/labels'
+      collection_path 'labels'
       primary_key :id
 
       parse_root_in_json true

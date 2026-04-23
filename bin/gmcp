@@ -1,11 +1,14 @@
 #!/usr/bin/env ruby
 
+require 'bundler/setup'
 require_relative '../lib/gmcp'
 
-account = ENV['GMCP_ACCOUNT'] or abort 'Set GMCP_ACCOUNT to the Google account to use'
-
-begin
-  GMCP::Server.run!(account: account)
-rescue GMCP::Auth::AuthRequired => e
-  abort e.message
+accounts = if ENV['GMCP_ACCOUNTS']
+  ENV['GMCP_ACCOUNTS'].split(',').map(&:strip).reject(&:empty?)
+elsif ENV['GMCP_ACCOUNT']
+  [ENV['GMCP_ACCOUNT']]
+else
+  abort 'Set GMCP_ACCOUNTS (comma-separated) or GMCP_ACCOUNT to the Google account(s) to use'
 end
+
+GMCP::Server.run!(accounts: accounts)

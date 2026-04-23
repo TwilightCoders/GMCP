@@ -14,7 +14,7 @@ server with full `gmail.modify`, `calendar.events`, and `drive.readonly` scopes.
 
 ## Tools
 
-**Gmail (8 tools)**
+**Gmail (9 tools)**
 `gmail_search`, `gmail_get_message`, `gmail_list_labels`, `gmail_trash_message`,
 `gmail_archive_message`, `gmail_label_message`, `gmail_send`, `gmail_create_draft`, `gmail_reply`
 
@@ -48,20 +48,7 @@ git clone https://github.com/TwilightCoders/GMCP ~/.gmcp
 cd ~/.gmcp && bundle install
 ```
 
-### 3. Authorize your account
-
-```bash
-bin/gmcp-auth you@example.com
-# → prints an authorization URL
-
-# Open the URL in your browser, approve access, copy the code, then:
-bin/gmcp-auth you@example.com <paste-code-here>
-# → Token stored at ~/.config/gmcp/you@example.com/token.yaml
-```
-
-Run this once per Google account. Tokens auto-refresh on subsequent runs.
-
-### 4. Wire up Claude Code
+### 3. Wire up Claude Code
 
 Add to your Claude Code `settings.json` (usually `~/.claude/settings.json`):
 
@@ -94,6 +81,10 @@ For multiple accounts:
   }
 }
 ```
+
+### 4. Authorize from Claude
+
+Once the server is wired up, ask Claude to call `gmcp_authorize`. It will return a URL — open it in your browser, approve access, copy the code, then call `gmcp_authorize` again with the code. Tokens are stored at `~/.config/gmcp/<account>/token.yaml` and auto-refresh on subsequent runs.
 
 ## Development
 

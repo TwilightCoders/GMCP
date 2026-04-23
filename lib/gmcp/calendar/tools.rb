@@ -3,12 +3,16 @@ require 'mcp'
 module GMCP
   module Calendar
     module Tools
+      ACCOUNT_PARAM = { account: { type: 'string', description: 'Google account to use (optional if only one is configured)' } }.freeze
+
       def self.register(server)
         server.define_tool(
           name: 'calendar_list_calendars',
           description: 'List all calendars on the account',
-          input_schema: { properties: {}, required: [] }
-        ) do
+          input_schema: { properties: { **ACCOUNT_PARAM } }
+        ) do |account: nil|
+          auth_err = GMCP::Server.use_account(account)
+          next auth_err if auth_err
           cals = Calendar.all
           text = cals.map { |c| "#{c.id}: #{c.summary}#{c.primary ? ' [primary]' : ''}" }.join("\n")
           MCP::Tool::Response.new([{ type: 'text', text: text }])
@@ -22,11 +26,13 @@ module GMCP
               calendar_id: { type: 'string', description: 'Calendar ID (default: primary)' },
               time_min:    { type: 'string', description: 'RFC3339 start of range, e.g. 2025-01-01T00:00:00Z' },
               time_max:    { type: 'string', description: 'RFC3339 end of range' },
-              max_results: { type: 'integer' }
-            },
-            required: []
+              max_results: { type: 'integer' },
+              **ACCOUNT_PARAM
+            }
           }
-        ) do |calendar_id: 'primary', time_min: nil, time_max: nil, max_results: 20|
+        ) do |calendar_id: 'primary', time_min: nil, time_max: nil, max_results: 20, account: nil|
+          auth_err = GMCP::Server.use_account(account)
+          next auth_err if auth_err
           events = Event.list(calendar_id: calendar_id, time_min: time_min, time_max: time_max, max_results: max_results)
           text = events.map { |e| "#{e.id}: #{e.summary} (#{e.start})" }.join("\n")
           MCP::Tool::Response.new([{ type: 'text', text: text.empty? ? 'No events found.' : text }])
@@ -38,11 +44,14 @@ module GMCP
           input_schema: {
             properties: {
               event_id:    { type: 'string' },
-              calendar_id: { type: 'string' }
+              calendar_id: { type: 'string' },
+              **ACCOUNT_PARAM
             },
             required: ['event_id']
           }
-        ) do |event_id:, calendar_id: 'primary'|
+        ) do |event_id:, calendar_id: 'primary', account: nil|
+          auth_err = GMCP::Server.use_account(account)
+          next auth_err if auth_err
           event = Event.find(event_id)
           MCP::Tool::Response.new([{ type: 'text', text: event.to_json }])
         end
@@ -58,11 +67,14 @@ module GMCP
               description: { type: 'string' },
               location:    { type: 'string' },
               attendees:   { type: 'array', items: { type: 'string' }, description: 'Email addresses' },
-              calendar_id: { type: 'string' }
+              calendar_id: { type: 'string' },
+              **ACCOUNT_PARAM
             },
             required: ['summary', 'start_time', 'end_time']
           }
-        ) do |summary:, start_time:, end_time:, description: nil, location: nil, attendees: [], calendar_id: 'primary'|
+        ) do |summary:, start_time:, end_time:, description: nil, location: nil, attendees: [], calendar_id: 'primary', account: nil|
+          auth_err = GMCP::Server.use_account(account)
+          next auth_err if auth_err
           attrs = {
             summary:   summary,
             start:     { dateTime: start_time },
@@ -86,11 +98,14 @@ module GMCP
               end_time:    { type: 'string', description: 'RFC3339 datetime' },
               description: { type: 'string' },
               location:    { type: 'string' },
-              calendar_id: { type: 'string' }
+              calendar_id: { type: 'string' },
+              **ACCOUNT_PARAM
             },
             required: ['event_id']
           }
-        ) do |event_id:, calendar_id: 'primary', summary: nil, start_time: nil, end_time: nil, description: nil, location: nil|
+        ) do |event_id:, calendar_id: 'primary', summary: nil, start_time: nil, end_time: nil, description: nil, location: nil, account: nil|
+          auth_err = GMCP::Server.use_account(account)
+          next auth_err if auth_err
           attrs = {}
           attrs[:summary]     = summary                      if summary
           attrs[:start]       = { dateTime: start_time }    if start_time
@@ -107,11 +122,14 @@ module GMCP
           input_schema: {
             properties: {
               event_id:    { type: 'string' },
-              calendar_id: { type: 'string' }
+              calendar_id: { type: 'string' },
+              **ACCOUNT_PARAM
             },
             required: ['event_id']
           }
-        ) do |event_id:, calendar_id: 'primary'|
+        ) do |event_id:, calendar_id: 'primary', account: nil|
+          auth_err = GMCP::Server.use_account(account)
+          next auth_err if auth_err
           Event.delete_event(event_id: event_id, calendar_id: calendar_id)
           MCP::Tool::Response.new([{ type: 'text', text: "Event #{event_id} deleted." }])
         end
@@ -122,11 +140,14 @@ module GMCP
           input_schema: {
             properties: {
               event_id: { type: 'string' },
-              response: { type: 'string', enum: %w[accepted declined tentative] }
+              response: { type: 'string', enum: %w[accepted declined tentative] },
+              **ACCOUNT_PARAM
             },
             required: ['event_id', 'response']
           }
-        ) do |event_id:, response:|
+        ) do |event_id:, response:, account: nil|
+          auth_err = GMCP::Server.use_account(account)
+          next auth_err if auth_err
           Event.find(event_id).rsvp!(response)
           MCP::Tool::Response.new([{ type: 'text', text: "RSVP'd #{response} to event #{event_id}." }])
         end

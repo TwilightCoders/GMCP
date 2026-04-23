@@ -3,7 +3,7 @@ module GMCP
     class Draft
       include Him::Model
 
-      collection_path '/drafts'
+      collection_path 'drafts'
       primary_key :id
 
       parse_root_in_json true
@@ -12,13 +12,13 @@ module GMCP
       attributes :id, :message
 
       def send!
-        self.class.post_raw("/drafts/#{id}/send", {})
+        self.class.post_raw("drafts/#{id}/send", {})
       end
 
       class << self
         def create_draft(to:, subject:, body:)
           raw = "To: #{to}\r\nSubject: #{subject}\r\nContent-Type: text/plain\r\n\r\n#{body}"
-          post_raw('/drafts', { message: { raw: Base64.urlsafe_encode64(raw) } })
+          post_raw('drafts', { message: { raw: Base64.urlsafe_encode64(raw) } })
         end
       end
     end

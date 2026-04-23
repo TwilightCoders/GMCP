@@ -3,7 +3,7 @@ module GMCP
     class Message
       include Him::Model
 
-      collection_path '/messages'
+      collection_path 'messages'
       primary_key :id
 
       parse_root_in_json true
@@ -13,11 +13,11 @@ module GMCP
                  :sizeEstimate, :historyId, :internalDate
 
       def trash!
-        self.class.post_raw("/messages/#{id}/trash", {})
+        self.class.post_raw("messages/#{id}/trash", {})
       end
 
       def untrash!
-        self.class.post_raw("/messages/#{id}/untrash", {})
+        self.class.post_raw("messages/#{id}/untrash", {})
       end
 
       def archive!
@@ -25,7 +25,7 @@ module GMCP
       end
 
       def modify!(addLabelIds: [], removeLabelIds: [])
-        self.class.post_raw("/messages/#{id}/modify", {
+        self.class.post_raw("messages/#{id}/modify", {
           addLabelIds:    addLabelIds,
           removeLabelIds: removeLabelIds
         })
@@ -39,7 +39,7 @@ module GMCP
         raw = "To: #{from}\r\nSubject: #{reply_sub}\r\n" \
               "In-Reply-To: #{id}\r\nReferences: #{id}\r\n" \
               "Content-Type: text/plain\r\n\r\n#{body}"
-        self.class.post_raw('/messages/send', {
+        self.class.post_raw('messages/send', {
           raw:      Base64.urlsafe_encode64(raw),
           threadId: threadId
         })
@@ -47,12 +47,12 @@ module GMCP
 
       class << self
         def search(query, max_results: 20)
-          get_collection('/messages', q: query, maxResults: max_results)
+          get_collection('messages', q: query, maxResults: max_results)
         end
 
         def send_message(to:, subject:, body:)
           raw = "To: #{to}\r\nSubject: #{subject}\r\nContent-Type: text/plain\r\n\r\n#{body}"
-          post_raw('/messages/send', { raw: Base64.urlsafe_encode64(raw) })
+          post_raw('messages/send', { raw: Base64.urlsafe_encode64(raw) })
         end
       end
     end

@@ -5,7 +5,7 @@ require 'spec_helper'
 describe GMCP::Gmail::Message do
   describe 'model configuration' do
     it 'has collection path /messages' do
-      expect(described_class.collection_path).to eq('/messages')
+      expect(described_class.collection_path).to eq('messages')
     end
 
     it 'has primary key :id' do

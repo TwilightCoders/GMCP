@@ -3,7 +3,7 @@ module GMCP
     class Thread
       include Him::Model
 
-      collection_path '/threads'
+      collection_path 'threads'
       primary_key :id
 
       parse_root_in_json true
