@@ -3,162 +3,158 @@ require 'mcp'
 module GMCP
   module Gmail
     module Tools
-      ACCOUNT_PARAM = { account: { type: 'string', description: 'Google account to use (optional if only one is configured)' } }.freeze
-
       def self.register(server)
         register_read(server)
         register_write(server)
       end
 
       def self.register_read(server)
-        server.define_tool(
+        ToolHelpers.define_tool(
+          server,
           name: 'gmail_search',
           description: 'Search Gmail messages using a query string (same syntax as Gmail search box)',
-          input_schema: {
-            properties: {
-              query:       { type: 'string', description: 'Gmail search query, e.g. "from:alice subject:report"' },
-              max_results: { type: 'integer', description: 'Max messages to return (default 20)' },
-              **ACCOUNT_PARAM
-            },
-            required: ['query']
-          }
+          properties: {
+            query:       { type: 'string', description: 'Gmail search query, e.g. "from:alice subject:report"' },
+            max_results: { type: 'integer', description: 'Max messages to return (default 20)' },
+            **ToolHelpers::ACCOUNT_PARAM
+          },
+          required: ['query']
         ) do |query:, max_results: 20, account: nil|
-          auth_err = GMCP::Server.use_account(account)
-          next auth_err if auth_err
-          messages = Message.search(query, max_results: max_results)
-          text = messages.map { |m| "#{m.id} — #{m.snippet}" }.join("\n")
-          MCP::Tool::Response.new([{ type: 'text', text: text.empty? ? 'No messages found.' : text }])
+          GMCP::Server.with_account(account) do
+            messages = Message.search(query, max_results: max_results)
+            ToolHelpers.list_response(messages, empty_message: 'No messages found.') { |m| "#{m.id} — #{m.snippet}" }
+          end
         end
 
-        server.define_tool(
+        ToolHelpers.define_tool(
+          server,
           name: 'gmail_get_message',
           description: 'Get a Gmail message by ID',
-          input_schema: {
-            properties: { message_id: { type: 'string' }, **ACCOUNT_PARAM },
-            required: ['message_id']
-          }
+          properties: {
+            message_id: { type: 'string' },
+            **ToolHelpers::ACCOUNT_PARAM
+          },
+          required: ['message_id']
         ) do |message_id:, account: nil|
-          auth_err = GMCP::Server.use_account(account)
-          next auth_err if auth_err
-          msg = Message.find(message_id)
-          MCP::Tool::Response.new([{ type: 'text', text: msg.to_json }])
+          GMCP::Server.with_account(account) do
+            ToolHelpers.json_response(Message.find(message_id))
+          end
         end
 
-        server.define_tool(
+        ToolHelpers.define_tool(
+          server,
           name: 'gmail_list_labels',
           description: 'List all Gmail labels',
-          input_schema: { properties: { **ACCOUNT_PARAM } }
+          properties: { **ToolHelpers::ACCOUNT_PARAM }
         ) do |account: nil|
-          auth_err = GMCP::Server.use_account(account)
-          next auth_err if auth_err
-          labels = Label.all
-          text = labels.map { |l| "#{l.id}: #{l.name}" }.join("\n")
-          MCP::Tool::Response.new([{ type: 'text', text: text }])
+          GMCP::Server.with_account(account) do
+            ToolHelpers.list_response(Label.all, empty_message: 'No labels found.') { |l| "#{l.id}: #{l.name}" }
+          end
         end
       end
 
       def self.register_write(server)
-        server.define_tool(
+        ToolHelpers.define_tool(
+          server,
           name: 'gmail_trash_message',
           description: 'Move a Gmail message to trash',
-          input_schema: {
-            properties: { message_id: { type: 'string' }, **ACCOUNT_PARAM },
-            required: ['message_id']
-          }
+          properties: {
+            message_id: { type: 'string' },
+            **ToolHelpers::ACCOUNT_PARAM
+          },
+          required: ['message_id']
         ) do |message_id:, account: nil|
-          auth_err = GMCP::Server.use_account(account)
-          next auth_err if auth_err
-          Message.find(message_id).trash!
-          MCP::Tool::Response.new([{ type: 'text', text: "Message #{message_id} moved to trash." }])
+          GMCP::Server.with_account(account) do
+            Message.find(message_id).trash!
+            ToolHelpers.text_response("Message #{message_id} moved to trash.")
+          end
         end
 
-        server.define_tool(
+        ToolHelpers.define_tool(
+          server,
           name: 'gmail_archive_message',
           description: 'Archive a Gmail message (remove from INBOX)',
-          input_schema: {
-            properties: { message_id: { type: 'string' }, **ACCOUNT_PARAM },
-            required: ['message_id']
-          }
+          properties: {
+            message_id: { type: 'string' },
+            **ToolHelpers::ACCOUNT_PARAM
+          },
+          required: ['message_id']
         ) do |message_id:, account: nil|
-          auth_err = GMCP::Server.use_account(account)
-          next auth_err if auth_err
-          Message.find(message_id).archive!
-          MCP::Tool::Response.new([{ type: 'text', text: "Message #{message_id} archived." }])
+          GMCP::Server.with_account(account) do
+            Message.find(message_id).archive!
+            ToolHelpers.text_response("Message #{message_id} archived.")
+          end
         end
 
-        server.define_tool(
+        ToolHelpers.define_tool(
+          server,
           name: 'gmail_label_message',
           description: 'Add and/or remove labels on a Gmail message',
-          input_schema: {
-            properties: {
-              message_id:       { type: 'string' },
-              add_label_ids:    { type: 'array', items: { type: 'string' }, description: 'Label IDs to add' },
-              remove_label_ids: { type: 'array', items: { type: 'string' }, description: 'Label IDs to remove' },
-              **ACCOUNT_PARAM
-            },
-            required: ['message_id']
-          }
+          properties: {
+            message_id:       { type: 'string' },
+            add_label_ids:    { type: 'array', items: { type: 'string' }, description: 'Label IDs to add' },
+            remove_label_ids: { type: 'array', items: { type: 'string' }, description: 'Label IDs to remove' },
+            **ToolHelpers::ACCOUNT_PARAM
+          },
+          required: ['message_id']
         ) do |message_id:, add_label_ids: [], remove_label_ids: [], account: nil|
-          auth_err = GMCP::Server.use_account(account)
-          next auth_err if auth_err
-          Message.find(message_id).modify!(addLabelIds: add_label_ids, removeLabelIds: remove_label_ids)
-          MCP::Tool::Response.new([{ type: 'text', text: "Labels updated on #{message_id}." }])
+          GMCP::Server.with_account(account) do
+            Message.find(message_id).modify!(addLabelIds: add_label_ids, removeLabelIds: remove_label_ids)
+            ToolHelpers.text_response("Labels updated on #{message_id}.")
+          end
         end
 
-        server.define_tool(
+        ToolHelpers.define_tool(
+          server,
           name: 'gmail_send',
           description: 'Send a new email',
-          input_schema: {
-            properties: {
-              to:      { type: 'string', description: 'Recipient email address' },
-              subject: { type: 'string' },
-              body:    { type: 'string', description: 'Plain-text message body' },
-              **ACCOUNT_PARAM
-            },
-            required: ['to', 'subject', 'body']
-          }
+          properties: {
+            to:      { type: 'string', description: 'Recipient email address' },
+            subject: { type: 'string' },
+            body:    { type: 'string', description: 'Plain-text message body' },
+            **ToolHelpers::ACCOUNT_PARAM
+          },
+          required: ['to', 'subject', 'body']
         ) do |to:, subject:, body:, account: nil|
-          auth_err = GMCP::Server.use_account(account)
-          next auth_err if auth_err
-          Message.send_message(to: to, subject: subject, body: body)
-          MCP::Tool::Response.new([{ type: 'text', text: "Message sent to #{to}." }])
+          GMCP::Server.with_account(account) do
+            Message.send_message(to: to, subject: subject, body: body)
+            ToolHelpers.text_response("Message sent to #{to}.")
+          end
         end
 
-        server.define_tool(
+        ToolHelpers.define_tool(
+          server,
           name: 'gmail_create_draft',
           description: 'Create a Gmail draft',
-          input_schema: {
-            properties: {
-              to:      { type: 'string' },
-              subject: { type: 'string' },
-              body:    { type: 'string' },
-              **ACCOUNT_PARAM
-            },
-            required: ['to', 'subject', 'body']
-          }
+          properties: {
+            to:      { type: 'string' },
+            subject: { type: 'string' },
+            body:    { type: 'string' },
+            **ToolHelpers::ACCOUNT_PARAM
+          },
+          required: ['to', 'subject', 'body']
         ) do |to:, subject:, body:, account: nil|
-          auth_err = GMCP::Server.use_account(account)
-          next auth_err if auth_err
-          Draft.create_draft(to: to, subject: subject, body: body)
-          MCP::Tool::Response.new([{ type: 'text', text: "Draft created." }])
+          GMCP::Server.with_account(account) do
+            Draft.create_draft(to: to, subject: subject, body: body)
+            ToolHelpers.text_response('Draft created.')
+          end
         end
 
-        server.define_tool(
+        ToolHelpers.define_tool(
+          server,
           name: 'gmail_reply',
           description: 'Reply to a Gmail message',
-          input_schema: {
-            properties: {
-              message_id: { type: 'string' },
-              body:       { type: 'string', description: 'Reply body (plain text)' },
-              **ACCOUNT_PARAM
-            },
-            required: ['message_id', 'body']
-          }
+          properties: {
+            message_id: { type: 'string' },
+            body:       { type: 'string', description: 'Reply body (plain text)' },
+            **ToolHelpers::ACCOUNT_PARAM
+          },
+          required: ['message_id', 'body']
         ) do |message_id:, body:, account: nil|
-          auth_err = GMCP::Server.use_account(account)
-          next auth_err if auth_err
-          Message.find(message_id).reply!(body: body)
-          MCP::Tool::Response.new([{ type: 'text', text: "Reply sent." }])
+          GMCP::Server.with_account(account) do
+            Message.find(message_id).reply!(body: body)
+            ToolHelpers.text_response('Reply sent.')
+          end
         end
       end
     end

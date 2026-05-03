@@ -13,6 +13,8 @@ module GMCP
   autoload :Auth,             'gmcp/auth'
   autoload :BearerMiddleware, 'gmcp/bearer_middleware'
   autoload :Apis,             'gmcp/apis'
+  autoload :AccountRegistry,  'gmcp/account_registry'
+  autoload :ToolHelpers,      'gmcp/tool_helpers'
   autoload :Server,           'gmcp/server'
 
   module Gmail

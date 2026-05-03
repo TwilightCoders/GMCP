@@ -3,153 +3,144 @@ require 'mcp'
 module GMCP
   module Calendar
     module Tools
-      ACCOUNT_PARAM = { account: { type: 'string', description: 'Google account to use (optional if only one is configured)' } }.freeze
-
       def self.register(server)
-        server.define_tool(
+        ToolHelpers.define_tool(
+          server,
           name: 'calendar_list_calendars',
           description: 'List all calendars on the account',
-          input_schema: { properties: { **ACCOUNT_PARAM } }
+          properties: { **ToolHelpers::ACCOUNT_PARAM }
         ) do |account: nil|
-          auth_err = GMCP::Server.use_account(account)
-          next auth_err if auth_err
-          cals = Calendar.all
-          text = cals.map { |c| "#{c.id}: #{c.summary}#{c.primary ? ' [primary]' : ''}" }.join("\n")
-          MCP::Tool::Response.new([{ type: 'text', text: text }])
+          GMCP::Server.with_account(account) do
+            ToolHelpers.list_response(Calendar.all, empty_message: 'No calendars found.') do |c|
+              "#{c.id}: #{c.summary}#{c.primary ? ' [primary]' : ''}"
+            end
+          end
         end
 
-        server.define_tool(
+        ToolHelpers.define_tool(
+          server,
           name: 'calendar_list_events',
           description: 'List events from a calendar within an optional time range',
-          input_schema: {
-            properties: {
-              calendar_id: { type: 'string', description: 'Calendar ID (default: primary)' },
-              time_min:    { type: 'string', description: 'RFC3339 start of range, e.g. 2025-01-01T00:00:00Z' },
-              time_max:    { type: 'string', description: 'RFC3339 end of range' },
-              max_results: { type: 'integer' },
-              **ACCOUNT_PARAM
-            }
+          properties: {
+            calendar_id: { type: 'string', description: 'Calendar ID (default: primary)' },
+            time_min:    { type: 'string', description: 'RFC3339 start of range, e.g. 2025-01-01T00:00:00Z' },
+            time_max:    { type: 'string', description: 'RFC3339 end of range' },
+            max_results: { type: 'integer' },
+            **ToolHelpers::ACCOUNT_PARAM
           }
         ) do |calendar_id: 'primary', time_min: nil, time_max: nil, max_results: 20, account: nil|
-          auth_err = GMCP::Server.use_account(account)
-          next auth_err if auth_err
-          events = Event.list(calendar_id: calendar_id, time_min: time_min, time_max: time_max, max_results: max_results)
-          text = events.map { |e| "#{e.id}: #{e.summary} (#{e.start})" }.join("\n")
-          MCP::Tool::Response.new([{ type: 'text', text: text.empty? ? 'No events found.' : text }])
+          GMCP::Server.with_account(account) do
+            events = Event.list(calendar_id: calendar_id, time_min: time_min, time_max: time_max, max_results: max_results)
+            ToolHelpers.list_response(events, empty_message: 'No events found.') { |e| "#{e.id}: #{e.summary} (#{e.start})" }
+          end
         end
 
-        server.define_tool(
+        ToolHelpers.define_tool(
+          server,
           name: 'calendar_get_event',
           description: 'Get a calendar event by ID',
-          input_schema: {
-            properties: {
-              event_id:    { type: 'string' },
-              calendar_id: { type: 'string' },
-              **ACCOUNT_PARAM
-            },
-            required: ['event_id']
-          }
+          properties: {
+            event_id:    { type: 'string' },
+            calendar_id: { type: 'string' },
+            **ToolHelpers::ACCOUNT_PARAM
+          },
+          required: ['event_id']
         ) do |event_id:, calendar_id: 'primary', account: nil|
-          auth_err = GMCP::Server.use_account(account)
-          next auth_err if auth_err
-          event = Event.find(event_id)
-          MCP::Tool::Response.new([{ type: 'text', text: event.to_json }])
+          GMCP::Server.with_account(account) do
+            ToolHelpers.json_response(Event.find(event_id))
+          end
         end
 
-        server.define_tool(
+        ToolHelpers.define_tool(
+          server,
           name: 'calendar_create_event',
           description: 'Create a calendar event',
-          input_schema: {
-            properties: {
-              summary:     { type: 'string' },
-              start_time:  { type: 'string', description: 'RFC3339 datetime, e.g. 2025-06-01T10:00:00-07:00' },
-              end_time:    { type: 'string', description: 'RFC3339 datetime' },
-              description: { type: 'string' },
-              location:    { type: 'string' },
-              attendees:   { type: 'array', items: { type: 'string' }, description: 'Email addresses' },
-              calendar_id: { type: 'string' },
-              **ACCOUNT_PARAM
-            },
-            required: ['summary', 'start_time', 'end_time']
-          }
+          properties: {
+            summary:     { type: 'string' },
+            start_time:  { type: 'string', description: 'RFC3339 datetime, e.g. 2025-06-01T10:00:00-07:00' },
+            end_time:    { type: 'string', description: 'RFC3339 datetime' },
+            description: { type: 'string' },
+            location:    { type: 'string' },
+            attendees:   { type: 'array', items: { type: 'string' }, description: 'Email addresses' },
+            calendar_id: { type: 'string' },
+            **ToolHelpers::ACCOUNT_PARAM
+          },
+          required: ['summary', 'start_time', 'end_time']
         ) do |summary:, start_time:, end_time:, description: nil, location: nil, attendees: [], calendar_id: 'primary', account: nil|
-          auth_err = GMCP::Server.use_account(account)
-          next auth_err if auth_err
-          attrs = {
-            summary:   summary,
-            start:     { dateTime: start_time },
-            end:       { dateTime: end_time },
-            attendees: attendees.map { |e| { email: e } }
-          }
-          attrs[:description] = description if description
-          attrs[:location]    = location    if location
-          Event.create_event(calendar_id: calendar_id, **attrs)
-          MCP::Tool::Response.new([{ type: 'text', text: "Event '#{summary}' created." }])
+          GMCP::Server.with_account(account) do
+            attrs = {
+              summary:   summary,
+              start:     { dateTime: start_time },
+              end:       { dateTime: end_time },
+              attendees: attendees.map { |e| { email: e } }
+            }
+            attrs[:description] = description if description
+            attrs[:location]    = location    if location
+            Event.create_event(calendar_id: calendar_id, **attrs)
+            ToolHelpers.text_response("Event '#{summary}' created.")
+          end
         end
 
-        server.define_tool(
+        ToolHelpers.define_tool(
+          server,
           name: 'calendar_update_event',
           description: 'Update fields on an existing calendar event',
-          input_schema: {
-            properties: {
-              event_id:    { type: 'string' },
-              summary:     { type: 'string' },
-              start_time:  { type: 'string', description: 'RFC3339 datetime' },
-              end_time:    { type: 'string', description: 'RFC3339 datetime' },
-              description: { type: 'string' },
-              location:    { type: 'string' },
-              calendar_id: { type: 'string' },
-              **ACCOUNT_PARAM
-            },
-            required: ['event_id']
-          }
+          properties: {
+            event_id:    { type: 'string' },
+            summary:     { type: 'string' },
+            start_time:  { type: 'string', description: 'RFC3339 datetime' },
+            end_time:    { type: 'string', description: 'RFC3339 datetime' },
+            description: { type: 'string' },
+            location:    { type: 'string' },
+            calendar_id: { type: 'string' },
+            **ToolHelpers::ACCOUNT_PARAM
+          },
+          required: ['event_id']
         ) do |event_id:, calendar_id: 'primary', summary: nil, start_time: nil, end_time: nil, description: nil, location: nil, account: nil|
-          auth_err = GMCP::Server.use_account(account)
-          next auth_err if auth_err
-          attrs = {}
-          attrs[:summary]     = summary                      if summary
-          attrs[:start]       = { dateTime: start_time }    if start_time
-          attrs[:end]         = { dateTime: end_time }      if end_time
-          attrs[:description] = description                  if description
-          attrs[:location]    = location                     if location
-          Event.update_event(event_id: event_id, calendar_id: calendar_id, **attrs)
-          MCP::Tool::Response.new([{ type: 'text', text: "Event #{event_id} updated." }])
+          GMCP::Server.with_account(account) do
+            attrs = {}
+            attrs[:summary]     = summary                   if summary
+            attrs[:start]       = { dateTime: start_time } if start_time
+            attrs[:end]         = { dateTime: end_time }   if end_time
+            attrs[:description] = description               if description
+            attrs[:location]    = location                  if location
+            Event.update_event(event_id: event_id, calendar_id: calendar_id, **attrs)
+            ToolHelpers.text_response("Event #{event_id} updated.")
+          end
         end
 
-        server.define_tool(
+        ToolHelpers.define_tool(
+          server,
           name: 'calendar_delete_event',
           description: 'Delete a calendar event',
-          input_schema: {
-            properties: {
-              event_id:    { type: 'string' },
-              calendar_id: { type: 'string' },
-              **ACCOUNT_PARAM
-            },
-            required: ['event_id']
-          }
+          properties: {
+            event_id:    { type: 'string' },
+            calendar_id: { type: 'string' },
+            **ToolHelpers::ACCOUNT_PARAM
+          },
+          required: ['event_id']
         ) do |event_id:, calendar_id: 'primary', account: nil|
-          auth_err = GMCP::Server.use_account(account)
-          next auth_err if auth_err
-          Event.delete_event(event_id: event_id, calendar_id: calendar_id)
-          MCP::Tool::Response.new([{ type: 'text', text: "Event #{event_id} deleted." }])
+          GMCP::Server.with_account(account) do
+            Event.delete_event(event_id: event_id, calendar_id: calendar_id)
+            ToolHelpers.text_response("Event #{event_id} deleted.")
+          end
         end
 
-        server.define_tool(
+        ToolHelpers.define_tool(
+          server,
           name: 'calendar_rsvp',
           description: 'RSVP to a calendar event (accepted, declined, tentative)',
-          input_schema: {
-            properties: {
-              event_id: { type: 'string' },
-              response: { type: 'string', enum: %w[accepted declined tentative] },
-              **ACCOUNT_PARAM
-            },
-            required: ['event_id', 'response']
-          }
+          properties: {
+            event_id: { type: 'string' },
+            response: { type: 'string', enum: %w[accepted declined tentative] },
+            **ToolHelpers::ACCOUNT_PARAM
+          },
+          required: ['event_id', 'response']
         ) do |event_id:, response:, account: nil|
-          auth_err = GMCP::Server.use_account(account)
-          next auth_err if auth_err
-          Event.find(event_id).rsvp!(response)
-          MCP::Tool::Response.new([{ type: 'text', text: "RSVP'd #{response} to event #{event_id}." }])
+          GMCP::Server.with_account(account) do
+            Event.find(event_id).rsvp!(response)
+            ToolHelpers.text_response("RSVP'd #{response} to event #{event_id}.")
+          end
         end
       end
     end
