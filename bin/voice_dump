@@ -1,0 +1,133 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Read-only dumper for the internal Google Voice JSPB API.
+# Iterates every category, paginates via cursor, writes one JSON record per
+# thread to bin/voice_dump.jsonl, and prints a per-category summary.
+#
+# Reads Safari's cookies directly from ~/Library/Cookies/Cookies.binarycookies.
+# Makes ZERO mutating calls.
+
+require 'bundler/setup'
+require_relative '../lib/gmcp'
+require 'json'
+require 'time'
+
+OUTPUT_PATH = File.expand_path('../voice_dump.jsonl', __dir__)
+PAGE_SIZE   = 20
+MAX_PAGES   = 100          # safety cap per category (100 × 20 = 2000 threads)
+SLEEP_SEC   = 0.15         # polite throttle between calls
+
+session = GMCP::Voice::Session.new
+
+THREAD_ID_PATTERN = /\A[tc]\./.freeze
+
+def thread_record(cat, thread_arr)
+  thread_id = thread_arr[0]
+  messages  = thread_arr[2] || []
+  newest    = messages.first
+  last_ts_ms = newest&.dig(1).to_i
+
+  # Counterparty phone: for SMS threads, it's in the thread ID itself (t.+PHONE).
+  # For call-log threads (c.<hash>), it's in the message's participants array.
+  counterparty =
+    if thread_id.to_s.start_with?('t.')
+      thread_id.sub(/^t\./, '')
+    else
+      messages.filter_map { |m| m.dig(3, 0) }.first || thread_id
+    end
+
+  {
+    category:     cat,
+    thread_id:    thread_id,
+    kind:         thread_id.to_s.start_with?('t.') ? 'message' : 'call',
+    counterparty: counterparty,
+    msg_count:    messages.length,
+    last_ts_ms:   last_ts_ms,
+    last_iso:     last_ts_ms.positive? ? Time.at(last_ts_ms / 1000).utc.iso8601 : nil,
+    last_type:    newest&.dig(4),     # 10=SMS recv, 11=SMS sent, 2=voicemail, 7=call, 0/1=missed/received, etc.
+    last_read:    newest&.dig(5),
+    last_preview: (newest&.dig(11) || '').to_s[0, 120],
+    types:        messages.map { |m| m[4] }.compact.uniq.sort
+  }
+end
+
+# Response top-level shape is [<threads_arr>, ..., ...]. The threads array
+# is any array whose elements all look like [id_string_starting_with_t_or_c, _, _, ...].
+def extract_threads(response)
+  return [] unless response.is_a?(Array)
+  stack = [response]
+  until stack.empty?
+    node = stack.pop
+    next unless node.is_a?(Array) && !node.empty?
+    if node.all? { |e| e.is_a?(Array) && e[0].is_a?(String) && THREAD_ID_PATTERN.match?(e[0]) }
+      return node
+    end
+    node.each { |e| stack.push(e) if e.is_a?(Array) }
+  end
+  []
+end
+
+def unread_counts(info_response)
+  # Shape: [[[ [cat, nil, count], ... ]]]
+  tuples = info_response
+  tuples = tuples[0] while tuples.is_a?(Array) && tuples.length == 1 && tuples[0].is_a?(Array) && tuples[0][0].is_a?(Array) && !tuples[0][0][0].is_a?(Integer)
+  tuples = tuples[0] if tuples.is_a?(Array) && tuples[0].is_a?(Array) && tuples[0][0].is_a?(Integer)
+  tuples.to_a.each_with_object({}) { |t, h| h[t[0]] = t[2] if t.is_a?(Array) && t[0].is_a?(Integer) }
+end
+
+File.open(OUTPUT_PATH, 'w') do |out|
+  totals = {}
+
+  puts "=== threadinginfo/get (baseline unread counts) ==="
+  info = session.call('threadinginfo/get', [])
+  unread_counts(info).sort.each { |cat, n| puts "  cat #{cat}: #{n} unread" }
+
+  puts
+  (1..6).each do |cat|
+    page_threads = 0
+    cursor = nil
+    pages = 0
+
+    loop do
+      pages += 1
+      break if pages > MAX_PAGES
+
+      body = [cat, PAGE_SIZE, 15, cursor, nil, [nil, 1, 1, 1]]
+      begin
+        resp = session.call('api2thread/list', body)
+      rescue GMCP::Voice::Session::OperationError => e
+        warn "  cat #{cat} page #{pages}: #{e.message[0, 200]}"
+        break
+      end
+
+      threads = extract_threads(resp)
+      break if threads.empty?
+
+      threads.each do |t|
+        rec = thread_record(cat, t)
+        out.puts JSON.generate(rec)
+        page_threads += 1
+      end
+
+      # Cursor for next page = newest message timestamp of last thread returned
+      last_thread = threads.last
+      last_msgs = last_thread[2] || []
+      cursor_ms = last_msgs.first&.dig(1)
+      break if cursor_ms.nil? || cursor_ms.to_i.zero?
+
+      new_cursor = cursor_ms.to_s
+      break if new_cursor == cursor # no progress
+      cursor = new_cursor
+
+      sleep SLEEP_SEC
+    end
+
+    totals[cat] = page_threads
+    puts "  cat #{cat}: #{page_threads} threads (#{pages - 1} pages)"
+  end
+
+  puts
+  puts "Total: #{totals.values.sum} thread records"
+  puts "Wrote: #{OUTPUT_PATH}"
+end

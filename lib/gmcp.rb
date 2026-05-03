@@ -16,6 +16,7 @@ module GMCP
   autoload :AccountRegistry,  'gmcp/account_registry'
   autoload :ToolHelpers,      'gmcp/tool_helpers'
   autoload :Server,           'gmcp/server'
+  autoload :Voice,            'gmcp/voice'
 
   module Gmail
     autoload :Message, 'gmcp/gmail/message'

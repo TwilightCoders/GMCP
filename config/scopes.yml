@@ -9,3 +9,6 @@ calendar:
 
 drive:
   - https://www.googleapis.com/auth/drive.readonly
+
+voice:
+  - https://www.googleapis.com/auth/userinfo.email

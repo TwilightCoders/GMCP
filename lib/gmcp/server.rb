@@ -34,6 +34,7 @@ module GMCP
       Gmail::Tools.register(server)
       Calendar::Tools.register(server)
       Drive::Tools.register(server)
+      Voice::Tools.register(server)
       server
     end
 
@@ -70,6 +71,10 @@ module GMCP
           ToolHelpers.text_response("Authorization failed: #{e.class}: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
         end
       end
+    end
+
+    def self.default_account
+      @registry&.default_account
     end
 
     def self.registry

@@ -24,3 +24,11 @@ CLAUDE.md
 
 # Codex scratch docs / local agent artifacts
 .Codex/
+
+# Voice exploration artifacts: dumps contain personal data (phone numbers,
+# message content); requests/ contains live session cookies; vendor/ is a
+# scratch checkout of the dead pygooglevoice library kept for reference.
+/voice_dump.jsonl
+/requests/
+/vendor/
+/channel
