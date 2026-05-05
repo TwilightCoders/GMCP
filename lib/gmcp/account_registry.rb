@@ -39,6 +39,12 @@ module GMCP
     def load_account(account)
       @apis[account] = Apis.build_for_account(account:)
     rescue Auth::AuthRequired, Errno::ENOENT
+      # Account hasn't been authorized yet — leave unbound, gmcp_authorize will fix it.
+      nil
+    rescue Signet::AuthorizationError, Google::Auth::AuthorizationError => e
+      # Refresh token revoked or expired. Don't crash the whole server —
+      # leave this account unbound and let the user re-authorize via gmcp_authorize.
+      warn "GMCP: stored token for #{account} is no longer valid (#{e.message[0, 120]}); call gmcp_authorize to reconnect"
       nil
     end
 

@@ -1,6 +1,7 @@
 require 'googleauth'
 require 'googleauth/stores/file_token_store'
 require 'socket'
+require 'uri'
 require 'webrick'
 require 'timeout'
 
@@ -45,7 +46,10 @@ module GMCP
     def self.authorize_interactive!(account:, on_success:)
       port     = free_port
       base_url = "http://localhost:#{port}"
-      url      = authorizer_for(account).get_authorization_url(base_url: base_url)
+      url      = with_login_hint(
+        authorizer_for(account).get_authorization_url(base_url: base_url),
+        account
+      )
 
       server = build_callback_server(account: account, base_url: base_url, port: port, on_success: on_success)
       start_callback_server(server)
@@ -53,6 +57,17 @@ module GMCP
       open_browser(url)
       url
     end
+
+    # Append login_hint=<account> so Google's consent screen pre-selects the
+    # right account when the user has multiple Google accounts signed in.
+    # The googleauth gem's get_authorization_url doesn't expose this directly
+    # across all versions, so append it as a URL parameter manually.
+    def self.with_login_hint(url, account)
+      return url if account.nil? || account.empty?
+      separator = url.include?('?') ? '&' : '?'
+      "#{url}#{separator}login_hint=#{URI.encode_www_form_component(account)}"
+    end
+    private_class_method :with_login_hint
 
     def self.authorizer_for(account)
       FileUtils.mkdir_p(File.dirname(token_path(account)))
