@@ -166,13 +166,13 @@ the host models `gmail`, `google_calendar`, `drive`, and `voice` as separate
 connectors. One GMCP process serves all of them, and **they do not share account
 semantics.** Each declares which it has in `config/capabilities.yml`:
 
-| Connector | `account_scoping` | `account_source` | `GMCP_ACCOUNTS` constrains it? |
+| Connector | `account_scoping` | `credential_source` | `GMCP_ACCOUNTS` constrains it? |
 |---|---|---|---|
-| `gmcp` | `enforced` | `oauth` | yes |
-| `gmail` | `enforced` | `oauth` | yes |
-| `google_calendar` | `enforced` | `oauth` | yes |
-| `drive` | `enforced` | `oauth` | yes |
-| `voice` | **`ignored`** | `safari_session` | **no** |
+| `gmcp` | `enforced` | `local_file` | yes |
+| `gmail` | `enforced` | `local_file` | yes |
+| `google_calendar` | `enforced` | `local_file` | yes |
+| `drive` | `enforced` | `local_file` | yes |
+| `voice` | **`ignored`** | `delegated` | **no** |
 
 Voice has no usable OAuth path — the token-to-cookie exchange is reserved for
 Chromium — so `GMCP::Voice::Session` authenticates with the session cookies

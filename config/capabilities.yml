@@ -12,6 +12,14 @@
 # A static file (rather than a tool) also lets a registration UI read what a
 # connector COULD do without spawning it first.
 #
+# credential_source uses the identity-permissions §3 vocabulary verbatim
+# (local_file | keychain | delegated | none) rather than a GMCP dialect — §1 of
+# that doc is explicit that this codebase has already been bitten by one word
+# carrying several meanings. GMCP's OAuth tokens are local_file, at
+# ~/.config/gmcp/<account>/token.yaml. Voice is `delegated` per §11.2: a session
+# held by an application we do not run, whose principal we can neither inspect
+# nor constrain.
+#
 # ── account_scoping ────────────────────────────────────────────────────────
 #
 # One GMCP process serves several of the host's "connectors", and they do not
@@ -37,7 +45,7 @@ connectors:
   # ── the server itself ────────────────────────────────────────────────────
   - name: gmcp
     account_scoping: enforced
-    account_source: oauth
+    credential_source: local_file
     description: GMCP's own administrative surface.
     capabilities:
       - name: gmcp.authorize
@@ -49,7 +57,7 @@ connectors:
   # ── Gmail ────────────────────────────────────────────────────────────────
   - name: gmail
     account_scoping: enforced
-    account_source: oauth
+    credential_source: local_file
     description: Google Mail, per authorized account.
     capabilities:
       - name: gmail.read
@@ -76,7 +84,7 @@ connectors:
   # ── Calendar ─────────────────────────────────────────────────────────────
   - name: google_calendar
     account_scoping: enforced
-    account_source: oauth
+    credential_source: local_file
     description: Google Calendar, per authorized account.
     capabilities:
       - name: calendar.read
@@ -96,7 +104,7 @@ connectors:
   # ── Drive ────────────────────────────────────────────────────────────────
   - name: drive
     account_scoping: enforced
-    account_source: oauth
+    credential_source: local_file
     description: Google Drive, per authorized account. Read-only; GMCP exposes no Drive writes.
     capabilities:
       - name: drive.read
@@ -106,7 +114,7 @@ connectors:
   # ── Voice ────────────────────────────────────────────────────────────────
   - name: voice
     account_scoping: ignored
-    account_source: safari_session
+    credential_source: delegated
     description: >-
       Google Voice. There is no usable OAuth path — the token-to-cookie exchange
       is reserved for Chromium — so this authenticates with the session cookies

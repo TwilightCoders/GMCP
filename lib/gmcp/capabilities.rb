@@ -53,6 +53,10 @@ module GMCP
     #              grant's connector_account is decorative for that connector.
     ACCOUNT_SCOPING = %w[enforced ignored].freeze
 
+    # identity-permissions §3 vocabulary, used verbatim rather than a GMCP
+    # dialect. Voice is `delegated` per §11.2.
+    CREDENTIAL_SOURCES = %w[local_file keychain delegated none].freeze
+
     def self.declared
       @declared ||= connectors.flat_map { |c| c.fetch("capabilities").map { |x| x.fetch("name") } }.freeze
     end

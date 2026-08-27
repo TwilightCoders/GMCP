@@ -104,8 +104,11 @@ RSpec.describe 'capability manifest' do
       end
     end
 
-    it 'gives every connector an account_source' do
-      expect(connectors.reject { |c| c['account_source'].to_s.strip.empty? }.length).to eq(connectors.length)
+    it 'gives every connector a credential_source from the §3 vocabulary' do
+      connectors.each do |c|
+        expect(GMCP::Capabilities::CREDENTIAL_SOURCES).to include(c['credential_source']),
+          "#{c['name']} declares credential_source #{c['credential_source'].inspect}"
+      end
     end
 
     it 'declares every capability under exactly one connector' do
@@ -120,11 +123,11 @@ RSpec.describe 'capability manifest' do
     it 'marks Voice as ignoring account scoping' do
       voice = connectors.find { |c| c['name'] == 'voice' }
       expect(voice.fetch('account_scoping')).to eq('ignored')
-      expect(voice.fetch('account_source')).to eq('safari_session')
+      expect(voice.fetch('credential_source')).to eq('delegated')
     end
 
-    it 'marks every OAuth-backed connector as enforcing account scoping' do
-      oauth = connectors.select { |c| c['account_source'] == 'oauth' }
+    it 'marks every locally-held-credential connector as enforcing account scoping' do
+      oauth = connectors.select { |c| c['credential_source'] == 'local_file' }
       expect(oauth.map { |c| c['name'] }).to contain_exactly('gmcp', 'gmail', 'google_calendar', 'drive')
       expect(oauth.map { |c| c['account_scoping'] }.uniq).to eq(['enforced'])
     end
