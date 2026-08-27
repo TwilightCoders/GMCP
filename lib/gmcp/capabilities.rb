@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "yaml"
+
 module GMCP
   # Capability gating for tool registration.
   #
@@ -28,24 +30,20 @@ module GMCP
   # the grant set is empty. Omitting it conditionally ("no grants, so skip the
   # env var") fails open and hands the agent everything.
   module Capabilities
-    ALL = %w[
-      gmcp.authorize
+    # Loaded from config/capabilities.yml — that file is the source of truth,
+    # and spec/gmcp/capability_manifest_spec.rb asserts it matches the tools
+    # actually registered in lib/.
+    MANIFEST_PATH = "config/capabilities.yml"
 
-      gmail.read
-      gmail.modify
-      gmail.trash
-      gmail.send
+    def self.manifest
+      @manifest ||= YAML.load_file(GMCP.root(MANIFEST_PATH)).freeze
+    end
 
-      calendar.read
-      calendar.write
-      calendar.delete
+    def self.declared
+      @declared ||= manifest.fetch("capabilities").map { |c| c.fetch("name") }.freeze
+    end
 
-      drive.read
-
-      voice.read
-      voice.modify
-      voice.trash
-    ].freeze
+    ALL = declared
 
     ENV_VAR = 'GMCP_CAPABILITIES'
 

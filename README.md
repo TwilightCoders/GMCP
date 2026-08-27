@@ -86,6 +86,89 @@ For multiple accounts:
 
 Once the server is wired up, ask Claude to call `gmcp_authorize`. It will return a URL — open it in your browser, approve access, copy the code, then call `gmcp_authorize` again with the code. Tokens are stored at `~/.config/gmcp/<account>/token.yaml` and auto-refresh on subsequent runs.
 
+## Multiple accounts and capability scoping
+
+GMCP is scoped along two independent axes. Both are environment variables read
+once at process start, so a given `bin/gmcp` process has a fixed, inspectable
+reach — it prints both to stderr on startup.
+
+### `GMCP_ACCOUNTS` — which mailboxes
+
+Comma-separated. Each account keeps its own OAuth token at
+`~/.config/gmcp/<account>/token.yaml`, and every Gmail/Calendar/Drive tool takes
+an optional `account:` argument selecting among them (defaulting to the first).
+
+```sh
+GMCP_ACCOUNTS=personal@example.com,work@example.com bin/gmcp
+```
+
+Authorize each one separately with `gmcp_authorize(account: "...")`.
+
+### `GMCP_CAPABILITIES` — which verbs
+
+Comma-separated capability names from `config/capabilities.yml`. Capabilities
+gate **registration**: a tool whose capability was not granted is never defined
+on the MCP server, so it never appears in `tools/list` and cannot be called no
+matter what the client sends.
+
+```sh
+# a read-only assistant
+GMCP_CAPABILITIES=gmail.read,calendar.read bin/gmcp
+
+# one that may also send
+GMCP_CAPABILITIES=gmail.read,gmail.send bin/gmcp
+```
+
+| Capability | Grants |
+|---|---|
+| `gmcp.authorize` | Start the OAuth flow (opens a browser) |
+| `gmail.read` | Search, read, list labels |
+| `gmail.modify_labels` | Add/remove labels; archive (archiving *is* removing `INBOX`) |
+| `gmail.trash` | Trash a message |
+| `gmail.send` | Send, draft, reply — the only capability whose effects reach third parties |
+| `calendar.read` | List calendars, read events |
+| `calendar.write` | Create, update, RSVP |
+| `calendar.delete` | Delete an event |
+| `drive.read` | Search, list folders, read files |
+| `voice.read` | List/search Voice; report which account Safari resolves to |
+| `voice.modify` | Archive, mark read/unread |
+| `voice.trash` | Trash a Voice message |
+
+`config/capabilities.yml` is the source of truth; a spec asserts it matches the
+tools actually registered, so it cannot silently drift.
+
+### Contract: unset and empty mean opposite things
+
+This distinction is the whole security boundary. It is not a convenience.
+
+| Value | Meaning |
+|---|---|
+| `GMCP_CAPABILITIES` **not set** | **Every** capability. For a human running `bin/gmcp` by hand with no grant system in front of it. |
+| `GMCP_CAPABILITIES=""` | **No** capabilities. The explicit empty grant set for an identity that was granted nothing. |
+
+**An automated launcher must always set the variable explicitly, including when
+the grant set is empty.** Omitting the key because there are no grants fails
+open and hands the process everything. There is no wildcard value, and unknown
+entries are dropped rather than trusted, so a grant cannot widen itself by typo.
+
+### Per-process isolation is required, not optional
+
+One process cannot safely serve two identities. GMCP binds the active account
+into process-global state — `him`'s `use_api` writes a class-level ivar on
+`Gmail::Message` and friends — so `with_account` mutates a shared global rather
+than establishing isolation. Scope by **spawning one GMCP process per (identity,
+account set)** with `GMCP_ACCOUNTS` and `GMCP_CAPABILITIES` set for that
+identity. Do not run a shared instance and scope per call.
+
+### A note on Voice
+
+Voice has no usable OAuth path, so `GMCP::Voice::Session` authenticates with the
+cookies Safari already holds. Its identity is therefore **whichever Google
+account is signed in to Safari**, which need not be any account in
+`GMCP_ACCOUNTS` — and `GMCP_ACCOUNTS` does not narrow it. Granting any `voice.*`
+capability grants reach over that Safari account. Call `voice_account` to see
+which one that currently is.
+
 ## Development
 
 ```bash

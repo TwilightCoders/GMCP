@@ -77,7 +77,7 @@ module GMCP
         ToolHelpers.define_tool(
           server,
           name: 'gmail_archive_message',
-          capability: 'gmail.modify',
+          capability: 'gmail.modify_labels',
           description: 'Archive a Gmail message (remove from INBOX)',
           properties: {
             message_id: { type: 'string' },
@@ -94,7 +94,7 @@ module GMCP
         ToolHelpers.define_tool(
           server,
           name: 'gmail_label_message',
-          capability: 'gmail.modify',
+          capability: 'gmail.modify_labels',
           description: 'Add and/or remove labels on a Gmail message',
           properties: {
             message_id:       { type: 'string' },
