@@ -39,8 +39,44 @@ module GMCP
       @manifest ||= YAML.load_file(GMCP.root(MANIFEST_PATH)).freeze
     end
 
+    # the host models gmail / google_calendar / drive / voice as separate
+    # connectors. One GMCP process serves all of them, and they do NOT share
+    # account semantics — see ACCOUNT_SCOPING.
+    def self.connectors
+      @connectors ||= manifest.fetch("connectors").freeze
+    end
+
+    # Whether GMCP_ACCOUNTS constrains which principal a connector reaches.
+    #
+    #   enforced — it does; a grant's connector_account means what it says.
+    #   ignored  — it does not; the principal is resolved outside GMCP, and a
+    #              grant's connector_account is decorative for that connector.
+    ACCOUNT_SCOPING = %w[enforced ignored].freeze
+
     def self.declared
-      @declared ||= manifest.fetch("capabilities").map { |c| c.fetch("name") }.freeze
+      @declared ||= connectors.flat_map { |c| c.fetch("capabilities").map { |x| x.fetch("name") } }.freeze
+    end
+
+    # capability name => the connector hash that declares it
+    def self.connector_index
+      @connector_index ||= connectors.each_with_object({}) do |connector, index|
+        connector.fetch("capabilities").each { |cap| index[cap.fetch("name")] = connector }
+      end.freeze
+    end
+
+    def self.connector_for(capability)
+      connector_index[capability]
+    end
+
+    def self.account_scoping_for(capability)
+      connector_for(capability)&.fetch("account_scoping")
+    end
+
+    # Granted capabilities whose connector ignores GMCP_ACCOUNTS. These reach a
+    # principal this process cannot narrow, so bin/gmcp says so on startup
+    # rather than letting the account list imply a containment it does not have.
+    def self.unscoped_grants
+      granted.select { |cap| account_scoping_for(cap) == "ignored" }
     end
 
     ALL = declared

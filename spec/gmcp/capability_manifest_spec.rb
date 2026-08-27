@@ -30,8 +30,13 @@ RSpec.describe 'capability manifest' do
 
   let(:manifest) { GMCP::Capabilities.manifest }
 
+  let(:connectors) { manifest.fetch('connectors') }
+
   let(:manifest_pairs) do
-    manifest.fetch('capabilities').flat_map { |c| c.fetch('tools').map { |t| [t, c.fetch('name')] } }.to_h
+    connectors
+      .flat_map { |c| c.fetch('capabilities') }
+      .flat_map { |cap| cap.fetch('tools').map { |t| [t, cap.fetch('name')] } }
+      .to_h
   end
 
   it 'declares every capability the tools actually claim' do
@@ -72,7 +77,8 @@ RSpec.describe 'capability manifest' do
   end
 
   it 'describes every capability, since the text is what a grant UI shows' do
-    undescribed = manifest.fetch('capabilities').reject { |c| c['description'].to_s.strip.length > 20 }
+    undescribed = connectors.flat_map { |c| c.fetch('capabilities') }
+                             .reject { |c| c['description'].to_s.strip.length > 20 }
     expect(undescribed.map { |c| c['name'] }).to be_empty
   end
 
@@ -88,5 +94,62 @@ RSpec.describe 'capability manifest' do
     # narrow name is the honest one.
     expect(manifest_pairs['gmail_archive_message']).to eq('gmail.modify_labels')
     expect(manifest_pairs['gmail_label_message']).to eq('gmail.modify_labels')
+  end
+
+  describe 'connector declarations' do
+    it 'gives every connector an account_scoping from the allowed set' do
+      connectors.each do |c|
+        expect(GMCP::Capabilities::ACCOUNT_SCOPING).to include(c['account_scoping']),
+          "#{c['name']} declares account_scoping #{c['account_scoping'].inspect}"
+      end
+    end
+
+    it 'gives every connector an account_source' do
+      expect(connectors.reject { |c| c['account_source'].to_s.strip.empty? }.length).to eq(connectors.length)
+    end
+
+    it 'declares every capability under exactly one connector' do
+      names = connectors.flat_map { |c| c.fetch('capabilities').map { |x| x.fetch('name') } }
+      expect(names).to eq(names.uniq)
+    end
+
+    # The safety property of the grant model is that connector_account always
+    # constrains. Voice violates it — its principal is whichever Google account
+    # Safari holds, resolved outside GMCP — so it must SAY so in a field a
+    # registration UI can read, not in a comment a UI cannot.
+    it 'marks Voice as ignoring account scoping' do
+      voice = connectors.find { |c| c['name'] == 'voice' }
+      expect(voice.fetch('account_scoping')).to eq('ignored')
+      expect(voice.fetch('account_source')).to eq('safari_session')
+    end
+
+    it 'marks every OAuth-backed connector as enforcing account scoping' do
+      oauth = connectors.select { |c| c['account_source'] == 'oauth' }
+      expect(oauth.map { |c| c['name'] }).to contain_exactly('gmcp', 'gmail', 'google_calendar', 'drive')
+      expect(oauth.map { |c| c['account_scoping'] }.uniq).to eq(['enforced'])
+    end
+
+    it 'reports scoping for every declared capability, so no grant is unclassified' do
+      GMCP::Capabilities::ALL.each do |cap|
+        expect(GMCP::Capabilities.account_scoping_for(cap)).not_to be_nil, "#{cap} has no connector"
+      end
+    end
+
+    it 'surfaces exactly the voice capabilities as unscoped grants' do
+      original = ENV.fetch('GMCP_CAPABILITIES', :unset)
+      ENV['GMCP_CAPABILITIES'] = 'gmail.read,voice.read,voice.trash'
+      GMCP::Capabilities.reset!
+      expect(GMCP::Capabilities.unscoped_grants).to contain_exactly('voice.read', 'voice.trash')
+    ensure
+      original == :unset ? ENV.delete('GMCP_CAPABILITIES') : ENV['GMCP_CAPABILITIES'] = original
+      GMCP::Capabilities.reset!
+    end
+
+    it 'explains any connector that ignores account scoping, since a UI must render it differently' do
+      connectors.select { |c| c['account_scoping'] == 'ignored' }.each do |c|
+        expect(c['description'].to_s.length).to be > 100,
+          "#{c['name']} ignores account scoping but does not explain what it reaches instead"
+      end
+    end
   end
 end

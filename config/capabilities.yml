@@ -1,86 +1,132 @@
-# Capability manifest for the GMCP connector.
+# Capability manifest for the GMCP MCP server.
 #
-# This file is the SOURCE OF TRUTH for what GMCP can do. GMCP::Capabilities
-# loads ALL from here, and a spec asserts that every capability declared here is
-# actually claimed by the tools listed, and vice versa — so the manifest cannot
-# drift from the code without the suite going red.
+# SOURCE OF TRUTH for what GMCP can do. GMCP::Capabilities loads from here, and
+# spec/gmcp/capability_manifest_spec.rb asserts that every capability declared
+# here is claimed by exactly the tools listed and vice versa — so the manifest
+# cannot drift from the code without the suite going red. the host's
+# identity-permissions §2 requires capabilities be "declared by the connector,
+# never inferred"; a declaration that can drift is worse than an inference,
+# because it reads as authoritative while being wrong. The drift spec is what
+# makes this file a fact about the connector rather than a claim by it.
 #
-# the host's identity-permissions design (§2) requires that capabilities are
-# "declared by the connector, never inferred" by the grant resolver. A static
-# file satisfies that literally and, unlike exposing the list through a tool,
-# lets a registration UI read it WITHOUT spawning the connector first.
+# A static file (rather than a tool) also lets a registration UI read what a
+# connector COULD do without spawning it first.
 #
-# Granting: see GMCP::Capabilities for the nil-vs-empty contract on
-# GMCP_CAPABILITIES. Unset means every capability; explicitly empty means none.
+# ── account_scoping ────────────────────────────────────────────────────────
+#
+# One GMCP process serves several of the host's "connectors", and they do not
+# share account semantics. Each declares which it has:
+#
+#   enforced — GMCP_ACCOUNTS constrains which principal this connector reaches.
+#              A grant's connector_account means what it says.
+#
+#   ignored  — GMCP_ACCOUNTS does NOT constrain this connector. The principal is
+#              resolved at call time by something outside GMCP. A grant's
+#              connector_account is DECORATIVE for it: it names an account that
+#              constrains nothing.
+#
+# `ignored` exists because Voice has one and it would otherwise look normal. The
+# safety property of the grant model is that the account column always
+# constrains; a connector that quietly violates that has to say so in a field a
+# UI can read, not in a comment. Render an `ignored` grant as the principal it
+# actually reaches, never as the account named on the row.
 
-connector: gmcp
+provider: gmcp
 
-capabilities:
-  - name: gmcp.authorize
-    description: >-
-      Start the OAuth consent flow for a configured Google account. Opens a
-      browser window on the machine running GMCP.
-    tools: [gmcp_authorize]
+connectors:
+  # ── the server itself ────────────────────────────────────────────────────
+  - name: gmcp
+    account_scoping: enforced
+    account_source: oauth
+    description: GMCP's own administrative surface.
+    capabilities:
+      - name: gmcp.authorize
+        description: >-
+          Start the OAuth consent flow for a configured Google account. Opens a
+          browser window on the machine running GMCP.
+        tools: [gmcp_authorize]
 
   # ── Gmail ────────────────────────────────────────────────────────────────
-  - name: gmail.read
-    description: Search and read mail, and list labels. No mutation of any kind.
-    tools: [gmail_search, gmail_get_message, gmail_list_labels]
+  - name: gmail
+    account_scoping: enforced
+    account_source: oauth
+    description: Google Mail, per authorized account.
+    capabilities:
+      - name: gmail.read
+        description: Search and read mail, and list labels. No mutation of any kind.
+        tools: [gmail_search, gmail_get_message, gmail_list_labels]
 
-  - name: gmail.modify_labels
-    description: >-
-      Add and remove labels on a message. Archiving is included because in
-      Gmail archiving IS removing the INBOX label — these tools reach labels
-      and nothing else.
-    tools: [gmail_archive_message, gmail_label_message]
+      - name: gmail.modify_labels
+        description: >-
+          Add and remove labels on a message. Archiving is included because in
+          Gmail archiving IS removing the INBOX label — these tools reach labels
+          and nothing else.
+        tools: [gmail_archive_message, gmail_label_message]
 
-  - name: gmail.trash
-    description: Move a message to the trash. Separate from modify_labels because it is destructive.
-    tools: [gmail_trash_message]
+      - name: gmail.trash
+        description: Move a message to the trash. Separate from modify_labels because it is destructive.
+        tools: [gmail_trash_message]
 
-  - name: gmail.send
-    description: >-
-      Send mail out into the world, or stage it as a draft. The highest-risk
-      capability here: it is the only one whose effects reach third parties.
-    tools: [gmail_send, gmail_create_draft, gmail_reply]
+      - name: gmail.send
+        description: >-
+          Send mail out into the world, or stage it as a draft. The highest-risk
+          capability here: the only one whose effects reach third parties.
+        tools: [gmail_send, gmail_create_draft, gmail_reply]
 
   # ── Calendar ─────────────────────────────────────────────────────────────
-  - name: calendar.read
-    description: List calendars and read events. No mutation.
-    tools: [calendar_list_calendars, calendar_list_events, calendar_get_event]
+  - name: google_calendar
+    account_scoping: enforced
+    account_source: oauth
+    description: Google Calendar, per authorized account.
+    capabilities:
+      - name: calendar.read
+        description: List calendars and read events. No mutation.
+        tools: [calendar_list_calendars, calendar_list_events, calendar_get_event]
 
-  - name: calendar.write
-    description: >-
-      Create and update events, and respond to invitations. RSVP is here rather
-      than under read because it is visible to other attendees.
-    tools: [calendar_create_event, calendar_update_event, calendar_rsvp]
+      - name: calendar.write
+        description: >-
+          Create and update events, and respond to invitations. RSVP is here
+          rather than under read because it is visible to other attendees.
+        tools: [calendar_create_event, calendar_update_event, calendar_rsvp]
 
-  - name: calendar.delete
-    description: Delete an event. Separate from write because it is destructive.
-    tools: [calendar_delete_event]
+      - name: calendar.delete
+        description: Delete an event. Separate from write because it is destructive.
+        tools: [calendar_delete_event]
 
   # ── Drive ────────────────────────────────────────────────────────────────
-  - name: drive.read
-    description: Search Drive, list folders, and read file contents. GMCP exposes no Drive writes.
-    tools: [drive_search, drive_list_folder, drive_read_file]
+  - name: drive
+    account_scoping: enforced
+    account_source: oauth
+    description: Google Drive, per authorized account. Read-only; GMCP exposes no Drive writes.
+    capabilities:
+      - name: drive.read
+        description: Search Drive, list folders, and read file contents.
+        tools: [drive_search, drive_list_folder, drive_read_file]
 
   # ── Voice ────────────────────────────────────────────────────────────────
-  #
-  # Voice authenticates with Safari's cookies, not OAuth, so its identity is
-  # whichever Google account is signed in to Safari — NOT necessarily an account
-  # named in GMCP_ACCOUNTS. voice_account exists to make that visible. Granting
-  # any voice.* capability therefore grants reach over that Safari account, and
-  # GMCP_ACCOUNTS does not narrow it.
-  - name: voice.read
+  - name: voice
+    account_scoping: ignored
+    account_source: safari_session
     description: >-
-      List and search Voice messages, calls, and voicemail, and report which
-      account the current Safari session resolves to.
-    tools: [voice_account, voice_list, voice_search]
+      Google Voice. There is no usable OAuth path — the token-to-cookie exchange
+      is reserved for Chromium — so this authenticates with the session cookies
+      Safari already holds. The principal is therefore whichever Google account
+      is signed in to Safari, resolved at call time by a browser GMCP does not
+      control. GMCP_ACCOUNTS cannot narrow it. Granting any voice.* capability
+      grants reach over that Safari account whatever the grant's
+      connector_account says. Call voice_account to observe which account that
+      currently is.
+    capabilities:
+      - name: voice.read
+        description: >-
+          List and search Voice messages, calls, and voicemail, and report which
+          account the current Safari session resolves to.
+        tools: [voice_account, voice_list, voice_search]
 
-  - name: voice.modify
-    description: Archive a Voice thread, or mark a single message read/unread.
-    tools: [voice_archive, voice_mark_read]
+      - name: voice.modify
+        description: Archive a Voice thread, or mark a single message read/unread.
+        tools: [voice_archive, voice_mark_read]
 
-  - name: voice.trash
-    description: Move a Voice message to the trash. Separate because it is destructive.
-    tools: [voice_delete]
+      - name: voice.trash
+        description: Move a Voice message to the trash. Separate because it is destructive.
+        tools: [voice_delete]

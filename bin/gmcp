@@ -12,8 +12,20 @@ else
 end
 
 # stderr, not stdout — stdout is the MCP stdio transport. This is the one place
-# an operator can see what this process was actually granted.
+# an operator can see what a given process was actually granted.
 warn "GMCP: accounts     = #{accounts.join(', ')}"
 warn "GMCP: capabilities = #{GMCP::Capabilities.summary}"
+
+# Some connectors resolve their principal outside GMCP, so the account list
+# above does not bound them. Say so rather than letting it imply containment.
+unscoped = GMCP::Capabilities.unscoped_grants
+unless unscoped.empty?
+  by_connector = unscoped.group_by { |cap| GMCP::Capabilities.connector_for(cap).fetch('name') }
+  by_connector.each do |connector, caps|
+    warn "GMCP: NOTE — #{caps.join(', ')} reach the #{connector} principal, which " \
+         'GMCP_ACCOUNTS does NOT narrow.'
+  end
+  warn 'GMCP: NOTE — call voice_account to see which account that currently is.' if by_connector.key?('voice')
+end
 
 GMCP::Server.run!(accounts: accounts)

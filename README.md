@@ -160,14 +160,35 @@ than establishing isolation. Scope by **spawning one GMCP process per (identity,
 account set)** with `GMCP_ACCOUNTS` and `GMCP_CAPABILITIES` set for that
 identity. Do not run a shared instance and scope per call.
 
-### A note on Voice
+### Connectors and account scoping
 
-Voice has no usable OAuth path, so `GMCP::Voice::Session` authenticates with the
-cookies Safari already holds. Its identity is therefore **whichever Google
-account is signed in to Safari**, which need not be any account in
-`GMCP_ACCOUNTS` — and `GMCP_ACCOUNTS` does not narrow it. Granting any `voice.*`
-capability grants reach over that Safari account. Call `voice_account` to see
-which one that currently is.
+the host models `gmail`, `google_calendar`, `drive`, and `voice` as separate
+connectors. One GMCP process serves all of them, and **they do not share account
+semantics.** Each declares which it has in `config/capabilities.yml`:
+
+| Connector | `account_scoping` | `account_source` | `GMCP_ACCOUNTS` constrains it? |
+|---|---|---|---|
+| `gmcp` | `enforced` | `oauth` | yes |
+| `gmail` | `enforced` | `oauth` | yes |
+| `google_calendar` | `enforced` | `oauth` | yes |
+| `drive` | `enforced` | `oauth` | yes |
+| `voice` | **`ignored`** | `safari_session` | **no** |
+
+Voice has no usable OAuth path — the token-to-cookie exchange is reserved for
+Chromium — so `GMCP::Voice::Session` authenticates with the session cookies
+Safari already holds. Its principal is **whichever Google account is signed in to
+Safari**, resolved at call time by a browser GMCP does not control.
+`GMCP_ACCOUNTS` cannot narrow it.
+
+This matters beyond GMCP. In a grant model where the account column is the unit
+of scoping, a Voice grant reads as scoped and is not: the `connector_account` on
+it is decorative. That is why `account_scoping` is a field a UI can read rather
+than a note — an `ignored` grant should be rendered as the principal it actually
+reaches ("whichever account Safari holds"), never as the account named on the
+row. `bin/gmcp` prints the same warning at startup for any granted capability
+whose connector ignores scoping.
+
+Call `voice_account` to observe which account that currently is.
 
 ## Development
 
