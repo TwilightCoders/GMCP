@@ -11,4 +11,9 @@ else
   abort 'Set GMCP_ACCOUNTS (comma-separated) or GMCP_ACCOUNT to the Google account(s) to use'
 end
 
+# stderr, not stdout — stdout is the MCP stdio transport. This is the one place
+# an operator can see what this process was actually granted.
+warn "GMCP: accounts     = #{accounts.join(', ')}"
+warn "GMCP: capabilities = #{GMCP::Capabilities.summary}"
+
 GMCP::Server.run!(accounts: accounts)

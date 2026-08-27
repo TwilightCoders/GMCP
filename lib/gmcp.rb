@@ -14,6 +14,7 @@ module GMCP
   autoload :BearerMiddleware, 'gmcp/bearer_middleware'
   autoload :Apis,             'gmcp/apis'
   autoload :AccountRegistry,  'gmcp/account_registry'
+  autoload :Capabilities,     'gmcp/capabilities'
   autoload :ToolHelpers,      'gmcp/tool_helpers'
   autoload :Server,           'gmcp/server'
   autoload :Voice,            'gmcp/voice'

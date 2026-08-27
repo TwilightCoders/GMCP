@@ -7,6 +7,7 @@ module GMCP
         ToolHelpers.define_tool(
           server,
           name: 'calendar_list_calendars',
+          capability: 'calendar.read',
           description: 'List all calendars on the account',
           properties: { **ToolHelpers::ACCOUNT_PARAM }
         ) do |account: nil|
@@ -20,6 +21,7 @@ module GMCP
         ToolHelpers.define_tool(
           server,
           name: 'calendar_list_events',
+          capability: 'calendar.read',
           description: 'List events from a calendar within an optional time range',
           properties: {
             calendar_id: { type: 'string', description: 'Calendar ID (default: primary)' },
@@ -38,6 +40,7 @@ module GMCP
         ToolHelpers.define_tool(
           server,
           name: 'calendar_get_event',
+          capability: 'calendar.read',
           description: 'Get a calendar event by ID',
           properties: {
             event_id:    { type: 'string' },
@@ -54,6 +57,7 @@ module GMCP
         ToolHelpers.define_tool(
           server,
           name: 'calendar_create_event',
+          capability: 'calendar.write',
           description: 'Create a calendar event',
           properties: {
             summary:     { type: 'string' },
@@ -84,6 +88,7 @@ module GMCP
         ToolHelpers.define_tool(
           server,
           name: 'calendar_update_event',
+          capability: 'calendar.write',
           description: 'Update fields on an existing calendar event',
           properties: {
             event_id:    { type: 'string' },
@@ -112,6 +117,7 @@ module GMCP
         ToolHelpers.define_tool(
           server,
           name: 'calendar_delete_event',
+          capability: 'calendar.delete',
           description: 'Delete a calendar event',
           properties: {
             event_id:    { type: 'string' },
@@ -129,6 +135,7 @@ module GMCP
         ToolHelpers.define_tool(
           server,
           name: 'calendar_rsvp',
+          capability: 'calendar.write',
           description: 'RSVP to a calendar event (accepted, declined, tentative)',
           properties: {
             event_id: { type: 'string' },

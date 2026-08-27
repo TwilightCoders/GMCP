@@ -7,6 +7,7 @@ module GMCP
         ToolHelpers.define_tool(
           server,
           name: 'drive_search',
+          capability: 'drive.read',
           description: 'Search Google Drive files using a query string',
           properties: {
             query:       { type: 'string', description: "Drive query, e.g. \"name contains 'report' and mimeType='application/pdf'\"" },
@@ -24,6 +25,7 @@ module GMCP
         ToolHelpers.define_tool(
           server,
           name: 'drive_list_folder',
+          capability: 'drive.read',
           description: 'List files in a Drive folder',
           properties: {
             folder_id:   { type: 'string', description: 'Drive folder ID or "root"' },
@@ -41,6 +43,7 @@ module GMCP
         ToolHelpers.define_tool(
           server,
           name: 'drive_read_file',
+          capability: 'drive.read',
           description: 'Download/read the content of a Drive file',
           properties: {
             file_id: { type: 'string' },

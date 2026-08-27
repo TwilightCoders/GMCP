@@ -12,6 +12,7 @@ module GMCP
         ToolHelpers.define_tool(
           server,
           name: 'gmail_search',
+          capability: 'gmail.read',
           description: 'Search Gmail messages using a query string (same syntax as Gmail search box)',
           properties: {
             query:       { type: 'string', description: 'Gmail search query, e.g. "from:alice subject:report"' },
@@ -29,6 +30,7 @@ module GMCP
         ToolHelpers.define_tool(
           server,
           name: 'gmail_get_message',
+          capability: 'gmail.read',
           description: 'Get a Gmail message by ID',
           properties: {
             message_id: { type: 'string' },
@@ -44,6 +46,7 @@ module GMCP
         ToolHelpers.define_tool(
           server,
           name: 'gmail_list_labels',
+          capability: 'gmail.read',
           description: 'List all Gmail labels',
           properties: { **ToolHelpers::ACCOUNT_PARAM }
         ) do |account: nil|
@@ -57,6 +60,7 @@ module GMCP
         ToolHelpers.define_tool(
           server,
           name: 'gmail_trash_message',
+          capability: 'gmail.trash',
           description: 'Move a Gmail message to trash',
           properties: {
             message_id: { type: 'string' },
@@ -73,6 +77,7 @@ module GMCP
         ToolHelpers.define_tool(
           server,
           name: 'gmail_archive_message',
+          capability: 'gmail.modify',
           description: 'Archive a Gmail message (remove from INBOX)',
           properties: {
             message_id: { type: 'string' },
@@ -89,6 +94,7 @@ module GMCP
         ToolHelpers.define_tool(
           server,
           name: 'gmail_label_message',
+          capability: 'gmail.modify',
           description: 'Add and/or remove labels on a Gmail message',
           properties: {
             message_id:       { type: 'string' },
@@ -107,6 +113,7 @@ module GMCP
         ToolHelpers.define_tool(
           server,
           name: 'gmail_send',
+          capability: 'gmail.send',
           description: 'Send a new email',
           properties: {
             to:      { type: 'string', description: 'Recipient email address' },
@@ -125,6 +132,7 @@ module GMCP
         ToolHelpers.define_tool(
           server,
           name: 'gmail_create_draft',
+          capability: 'gmail.send',
           description: 'Create a Gmail draft',
           properties: {
             to:      { type: 'string' },
@@ -143,6 +151,7 @@ module GMCP
         ToolHelpers.define_tool(
           server,
           name: 'gmail_reply',
+          capability: 'gmail.send',
           description: 'Reply to a Gmail message',
           properties: {
             message_id: { type: 'string' },
