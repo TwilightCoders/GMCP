@@ -62,24 +62,40 @@ connectors:
     capabilities:
       - name: gmail.read
         description: Search and read mail, and list labels. No mutation of any kind.
-        tools: [gmail_search, gmail_get_message, gmail_list_labels]
+        tools: [gmail_search, gmail_get_message, gmail_list_labels,
+                gmail_list_attachments, gmail_unsubscribe_info]
 
       - name: gmail.modify_labels
         description: >-
           Add and remove labels on a message. Archiving is included because in
           Gmail archiving IS removing the INBOX label — these tools reach labels
           and nothing else.
-        tools: [gmail_archive_message, gmail_label_message]
+        tools: [gmail_archive_message, gmail_label_message,
+                gmail_batch_archive, gmail_batch_modify]
 
       - name: gmail.trash
         description: Move a message to the trash. Separate from modify_labels because it is destructive.
-        tools: [gmail_trash_message]
+        tools: [gmail_trash_message, gmail_batch_trash]
 
       - name: gmail.send
         description: >-
           Send mail out into the world, or stage it as a draft. The highest-risk
           capability here: the only one whose effects reach third parties.
         tools: [gmail_send, gmail_create_draft, gmail_reply]
+
+      - name: gmail.download
+        description: >-
+          Write attachment bytes to a local directory. Separate from gmail.read
+          because reading headers into a response is not the same act as
+          creating files on the machine GMCP runs on.
+        tools: [gmail_download_attachment]
+
+      - name: gmail.unsubscribe
+        description: >-
+          Send an RFC 8058 one-click unsubscribe to the URL in a message's own
+          List-Unsubscribe header. Separate because it leaves Google entirely
+          and tells a third party the address is live.
+        tools: [gmail_unsubscribe]
 
   # ── Calendar ─────────────────────────────────────────────────────────────
   - name: google_calendar

@@ -122,10 +122,12 @@ GMCP_CAPABILITIES=gmail.read,gmail.send bin/gmcp
 | Capability | Grants |
 |---|---|
 | `gmcp.authorize` | Start the OAuth flow (opens a browser) |
-| `gmail.read` | Search, read, list labels |
-| `gmail.modify_labels` | Add/remove labels; archive (archiving *is* removing `INBOX`) |
-| `gmail.trash` | Trash a message |
-| `gmail.send` | Send, draft, reply — the only capability whose effects reach third parties |
+| `gmail.read` | Search (paginated), read, list labels, list attachments, inspect unsubscribe options |
+| `gmail.modify_labels` | Add/remove labels and archive, single or batched (archiving *is* removing `INBOX`) |
+| `gmail.trash` | Trash a message, single or batched |
+| `gmail.send` | Send, draft, reply |
+| `gmail.download` | Write attachment bytes to a local directory |
+| `gmail.unsubscribe` | RFC 8058 one-click unsubscribe — leaves Google, tells a third party the address is live |
 | `calendar.read` | List calendars, read events |
 | `calendar.write` | Create, update, RSVP |
 | `calendar.delete` | Delete an event |
@@ -136,6 +138,29 @@ GMCP_CAPABILITIES=gmail.read,gmail.send bin/gmcp
 
 `config/capabilities.yml` is the source of truth; a spec asserts it matches the
 tools actually registered, so it cannot silently drift.
+
+### Bulk work
+
+`gmail_search` paginates. It returns a `page_token` whenever more results exist;
+pass it back to walk a whole mailbox. In Ruby, `Message.each_page` handles the
+cursor for you and is bounded by `max_pages` so a runaway cursor cannot spin.
+
+```ruby
+GMCP::Gmail::Message.each_page('in:inbox', max_results: 500) do |page|
+  page[:messages].each { |m| ... }
+end
+```
+
+Acting on the result is batched — `gmail_batch_archive`, `gmail_batch_trash`,
+and `gmail_batch_modify` take up to 1000 ids in one request rather than one
+round trip per message. Gmail returns nothing per-message, so a partial failure
+is not distinguishable; re-read if you need per-message confirmation.
+
+Attachments are two steps: `gmail_list_attachments` (under `gmail.read`) gives
+you filenames and ids, `gmail_download_attachment` (under `gmail.download`)
+writes one to a directory you name. There is no default destination, the
+filename is reduced to a basename so it cannot escape that directory, and an
+existing file is never overwritten.
 
 ### Contract: unset and empty mean opposite things
 

@@ -15,6 +15,9 @@ require 'json'
 require 'optparse'
 require 'time'
 
+# Unbuffered so progress is visible when stdout is a pipe, not just a TTY.
+$stdout.sync = true
+
 options = {
   query:   '',           # all mail
   limit:   3000,
