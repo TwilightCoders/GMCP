@@ -1,0 +1,163 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Read-only Gmail survey. Pages through messages matching a query, fetches
+# minimal metadata (From, Subject, List-Unsubscribe, label IDs, internalDate)
+# for each, and aggregates into per-sender stats.
+#
+# Usage: bin/gmail_survey [--query "<gmail query>"] [--limit N] [--out PATH]
+#
+# Defaults to a broad sample so we can spot the bulk-win senders quickly.
+
+require 'bundler/setup'
+require_relative '../lib/gmcp'
+require 'json'
+require 'optparse'
+require 'time'
+
+options = {
+  query:   '',           # all mail
+  limit:   3000,
+  out:     'gmail_survey.json',
+  account: ENV['GMCP_ACCOUNT'] || ENV['GMCP_ACCOUNTS']&.split(',')&.first&.strip
+}
+OptionParser.new do |o|
+  o.on('--query Q')   { |v| options[:query]   = v }
+  o.on('--limit N')   { |v| options[:limit]   = v.to_i }
+  o.on('--out PATH')  { |v| options[:out]     = v }
+  o.on('--account A') { |v| options[:account] = v }
+end.parse!
+
+abort 'No account configured (set GMCP_ACCOUNT or pass --account)' unless options[:account]
+
+conn = GMCP::Apis.build_for_account(account: options[:account])[:gmail].connection
+
+def extract_email(from_header)
+  return nil unless from_header
+  m = from_header.match(/<([^>]+)>/) || from_header.match(/(\S+@\S+\.\S+)/)
+  m ? m[1].downcase : from_header.strip.downcase
+end
+
+def extract_domain(email)
+  email.to_s.split('@', 2)[1]&.downcase
+end
+
+# Faraday collapses repeated `metadataHeaders` params, so we ask for full
+# metadata format and just pick the headers we need. Slightly larger payload
+# but predictable.
+def metadata_url(id)
+  "messages/#{id}?format=metadata"
+end
+
+# 1. Page through messages.list collecting IDs.
+ids = []
+page_token = nil
+batch = 0
+loop do
+  batch += 1
+  params = { maxResults: 500 }
+  params[:q] = options[:query] unless options[:query].empty?
+  params[:pageToken] = page_token if page_token
+  body = conn.get('messages', params).body
+  data = body[:data] || body['data'] || body
+  msgs = data[:messages] || data['messages'] || []
+  ids.concat(msgs.map { |m| m[:id] || m['id'] })
+  page_token = data[:nextPageToken] || data['nextPageToken']
+  print "\rlisting: #{ids.length} ids in #{batch} pages..."
+  break if page_token.nil? || ids.length >= options[:limit]
+end
+ids = ids.first(options[:limit])
+puts "\nlisted #{ids.length} message IDs"
+
+# 2. Fetch metadata for each.
+records = []
+ids.each_with_index do |id, i|
+  body = conn.get(metadata_url(id)).body
+  data = body[:data] || body['data'] || body
+  payload = data[:payload] || data['payload'] || {}
+  hdrs    = payload[:headers] || payload['headers'] || []
+  pick    = lambda do |name|
+    h = hdrs.find { |hh| (hh[:name] || hh['name']).to_s.downcase == name.downcase }
+    h && (h[:value] || h['value'])
+  end
+
+  from        = pick.call('From')
+  subject     = pick.call('Subject')
+  list_unsub  = pick.call('List-Unsubscribe')
+  email       = extract_email(from)
+  domain      = extract_domain(email)
+  labels      = data[:labelIds] || data['labelIds'] || []
+  ts_ms       = (data[:internalDate] || data['internalDate']).to_i
+
+  records << {
+    id:           id,
+    from:         from,
+    email:        email,
+    domain:       domain,
+    subject:      subject&.[](0, 120),
+    has_list:     !list_unsub.nil?,
+    labels:       labels,
+    is_unread:    labels.include?('UNREAD'),
+    in_inbox:     labels.include?('INBOX'),
+    in_trash:     labels.include?('TRASH'),
+    in_spam:      labels.include?('SPAM'),
+    is_promo:     labels.include?('CATEGORY_PROMOTIONS'),
+    is_update:    labels.include?('CATEGORY_UPDATES'),
+    is_social:    labels.include?('CATEGORY_SOCIAL'),
+    ts_ms:        ts_ms,
+    ts_iso:       ts_ms.positive? ? Time.at(ts_ms / 1000).utc.iso8601 : nil
+  }
+
+  if (i + 1) % 50 == 0 || i == ids.length - 1
+    print "\rfetched metadata: #{i + 1}/#{ids.length}"
+  end
+end
+puts
+
+# 3. Aggregate.
+by_sender = Hash.new { |h, k| h[k] = { count: 0, unread: 0, trashed: 0, newsletters: 0,
+                                       in_inbox: 0, promo: 0, update: 0, social: 0,
+                                       last_ts: 0, sample_subjects: [] } }
+records.each do |r|
+  key = r[:email] || '(unknown)'
+  s = by_sender[key]
+  s[:count]    += 1
+  s[:unread]   += 1 if r[:is_unread]
+  s[:trashed]  += 1 if r[:in_trash]
+  s[:newsletters] += 1 if r[:has_list]
+  s[:in_inbox] += 1 if r[:in_inbox]
+  s[:promo]    += 1 if r[:is_promo]
+  s[:update]   += 1 if r[:is_update]
+  s[:social]   += 1 if r[:is_social]
+  s[:last_ts]   = [s[:last_ts], r[:ts_ms]].max
+  s[:sample_subjects] << r[:subject] if s[:sample_subjects].length < 3 && r[:subject]
+end
+
+# 4. Write everything to JSON for further analysis.
+File.write(options[:out], JSON.pretty_generate({
+  query:   options[:query],
+  limit:   options[:limit],
+  fetched: records.length,
+  records: records,
+  by_sender: by_sender.transform_values { |v| v.merge(last_iso: v[:last_ts].positive? ? Time.at(v[:last_ts] / 1000).utc.iso8601 : nil) }
+}))
+
+# 5. Print top-line stats.
+total = records.length
+puts
+puts "=== Summary (n = #{total}) ==="
+puts "  unread:           #{records.count { |r| r[:is_unread] }}"
+puts "  in inbox:         #{records.count { |r| r[:in_inbox] }}"
+puts "  in trash:         #{records.count { |r| r[:in_trash] }}"
+puts "  newsletters:      #{records.count { |r| r[:has_list] }}"
+puts "  promo cat:        #{records.count { |r| r[:is_promo] }}"
+puts "  updates cat:      #{records.count { |r| r[:is_update] }}"
+puts
+puts "=== Top 25 senders by volume ==="
+printf "%6s  %6s  %6s  %6s  %s\n", 'count', 'unread', 'trash', 'newsl', 'sender'
+by_sender.sort_by { |_, v| -v[:count] }.first(25).each do |email, s|
+  printf "%6d  %6d  %6d  %6d  %s\n",
+    s[:count], s[:unread], s[:trashed], s[:newsletters], email
+end
+puts
+puts "Wrote #{options[:out]}"
