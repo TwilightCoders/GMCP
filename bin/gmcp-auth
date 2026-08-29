@@ -1,45 +1,70 @@
 #!/usr/bin/env ruby
 
+# Authorize a Google account for GMCP from the command line.
+#
+#   bin/gmcp-auth <account>
+#
+# Opens the OAuth consent page in a browser and captures the redirect on a
+# local callback server. Use this when the gmcp_authorize MCP tool isn't
+# reachable (server down, tools not loaded in the current session).
+#
+# Google shut off the out-of-band (urn:ietf:wg:oauth:2.0:oob) flow in 2022, so
+# there is no copy-the-code path any more — the loopback redirect is the only
+# option for a desktop client, and it is what Auth.authorize_interactive!
+# implements.
+
+require 'bundler/setup'
 require_relative '../lib/gmcp'
 
-# Usage:
-#   gmcp-auth <account>          — print authorization URL, wait for code
-#   gmcp-auth <account> <code>   — exchange code for token and persist
+# Unbuffered so progress is visible when stdout is a pipe, not just a TTY.
+$stdout.sync = true
 
-account = ARGV[0] or abort "Usage: #{File.basename($0)} <account> [code]"
-code    = ARGV[1]
+# Generous by default: this waits on a human completing a browser consent
+# screen, not on a machine. Override with GMCP_AUTH_TIMEOUT (seconds).
+TIMEOUT = Integer(ENV.fetch('GMCP_AUTH_TIMEOUT', 900))
 
-require 'googleauth'
-require 'googleauth/stores/file_token_store'
-require 'fileutils'
-
-credentials_path = ENV.fetch('GMCP_CREDENTIALS_FILE', GMCP::Auth::CREDENTIALS_PATH)
-token_path       = GMCP::Auth.token_path(account)
-
-unless File.exist?(credentials_path)
-  abort "credentials.json not found at #{credentials_path}\n" \
-        "Download it from https://console.cloud.google.com/ → APIs & Services → Credentials"
+account = ARGV[0]
+if account.nil? || account.empty?
+  abort "Usage: #{File.basename($PROGRAM_NAME)} <account>\n" \
+        "  e.g. #{File.basename($PROGRAM_NAME)} you@example.com"
 end
 
-FileUtils.mkdir_p(File.dirname(token_path))
-store       = Google::Auth::Stores::FileTokenStore.new(file: token_path)
-client_id   = Google::Auth::ClientId.from_file(credentials_path)
-authorizer  = Google::Auth::UserAuthorizer.new(client_id, GMCP::Auth.scopes, store)
-
-if code
-  creds = authorizer.get_and_store_credentials_from_code(
-    user_id:  account,
-    code:     code,
-    base_url: 'urn:ietf:wg:oauth:2.0:oob'
-  )
-  puts "Token stored for #{account} → #{token_path}"
-  puts "Access token expires: #{creds.expires_at}"
-else
-  url = authorizer.get_authorization_url(base_url: 'urn:ietf:wg:oauth:2.0:oob')
-  puts "Open this URL in your browser to authorize #{account}:"
-  puts
-  puts "  #{url}"
-  puts
-  puts "Then run:"
-  puts "  #{File.basename($0)} #{account} <code>"
+unless File.exist?(GMCP::Auth.credentials_path)
+  abort "credentials.json not found at #{GMCP::Auth.credentials_path}\n\n" \
+        "1. https://console.cloud.google.com/ → APIs & Services → Credentials\n" \
+        "2. Create an OAuth 2.0 Client ID (Desktop app)\n" \
+        "3. Save the JSON to that path"
 end
+
+authorized = false
+url = GMCP::Auth.authorize_interactive!(
+  account: account,
+  on_success: ->(_acct) { authorized = true }
+)
+
+puts "Authorizing #{account} — a browser window should have opened."
+puts
+puts "If it did not, open this manually:"
+puts "  #{url}"
+puts
+print 'Waiting for the callback'
+
+waited = 0
+until authorized || waited >= TIMEOUT
+  sleep 1
+  waited += 1
+  print '.' if (waited % 5).zero?
+end
+puts
+
+abort "\nTimed out after #{TIMEOUT}s with no callback. Nothing was stored." unless authorized
+
+# Prove the stored token actually works rather than trusting the callback.
+begin
+  GMCP::Auth.access_token(account: account)
+rescue StandardError => e
+  abort "Callback completed but the stored token does not work: #{e.class}: #{e.message}"
+end
+
+puts "Authorized #{account}."
+puts "Token stored at #{GMCP::Auth.token_path(account)}"
