@@ -3,6 +3,34 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0]
+
+### Fixed
+
+- **One process can now safely serve more than one account.** The active
+  account was written onto the model classes themselves (`him`'s `use_api`
+  stores a class-level ivar), so `with_account` mutated process-global state.
+  Two concurrent tool calls for different accounts raced, and the second could
+  execute against the first's mailbox. Isolation depended on never running two
+  at once, which is not isolation.
+
+  `GMCP::ApiBinding` binds each model to a *resolver* once — `him` resolves
+  `use_api` at request time and calls it if it responds to `:call` — and swaps
+  the account per fiber. `Server.with_account` scopes the binding to a block
+  and restores the previous one, so nesting cannot leak an account to its
+  caller. No change to `him` was required.
+
+  A request with nothing bound now raises `ApiBinding::NotBound` instead of
+  falling back to whatever the previous caller left behind.
+
+### Changed
+
+- `AccountRegistry` gains `apis_for` and `scoped`; `activate` is kept for
+  callers with no natural block extent. `bind_models!` is gone.
+- README no longer states that per-process isolation is required for account
+  separation. It remains required for *capability* separation, since
+  `GMCP_CAPABILITIES` is read once at startup.
+
 ## [0.2.0]
 
 ### Added

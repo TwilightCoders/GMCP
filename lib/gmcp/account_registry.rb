@@ -7,6 +7,7 @@ module GMCP
     def initialize(accounts:)
       @accounts = accounts
       @apis = {}
+      ApiBinding.install!
     end
 
     def load_authorized_accounts!
@@ -25,13 +26,40 @@ module GMCP
       accounts.length == 1 ? default_account : accounts.join(', ')
     end
 
-    def activate(account = nil)
+    # The API set for an account, or nil if it is unknown or unauthorized.
+    def apis_for(account = nil)
       account ||= default_account
-      apis = account && @apis[account]
-      return authorization_message(account) unless apis
+      account && @apis[account]
+    end
 
-      bind_models!(apis)
+    # Binds for the remainder of this fiber. Prefer #scoped, which restores the
+    # previous binding; this exists for callers that have no natural extent.
+    def activate(account = nil)
+      apis = apis_for(account)
+      return authorization_message(account || default_account) unless apis
+
+      ApiBinding.current = apis
       nil
+    end
+
+    # Runs the block with this account bound, restoring whatever was bound
+    # before. Returns [error_message, nil] or [nil, block_result] so the caller
+    # can tell an auth failure from a legitimately nil result.
+    def scoped(account = nil)
+      apis = apis_for(account)
+      return [authorization_message(account || default_account), nil] unless apis
+
+      [nil, ApiBinding.with(apis) { yield }]
+    end
+
+    def authorization_message(account)
+      if account && accounts.include?(account)
+        "Not authorized for #{account}. Call gmcp_authorize(account: \"#{account}\")."
+      elsif account
+        "Unknown account #{account.inspect}. Configured: #{accounts.join(', ')}."
+      else
+        'Not authorized. Call gmcp_authorize.'
+      end
     end
 
     private
@@ -46,22 +74,6 @@ module GMCP
       # leave this account unbound and let the user re-authorize via gmcp_authorize.
       warn "GMCP: stored token for #{account} is no longer valid (#{e.message[0, 120]}); call gmcp_authorize to reconnect"
       nil
-    end
-
-    def bind_models!(apis)
-      [Gmail::Message, Gmail::Thread, Gmail::Label, Gmail::Draft].each { |model| model.use_api(apis[:gmail]) }
-      [Calendar::Event, Calendar::Calendar].each { |model| model.use_api(apis[:calendar]) }
-      [Drive::File].each { |model| model.use_api(apis[:drive]) }
-    end
-
-    def authorization_message(account)
-      if account && accounts.include?(account)
-        "Not authorized for #{account}. Call gmcp_authorize(account: \"#{account}\")."
-      elsif account
-        "Unknown account #{account.inspect}. Configured: #{accounts.join(', ')}."
-      else
-        'Not authorized. Call gmcp_authorize.'
-      end
     end
   end
 end

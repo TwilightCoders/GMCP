@@ -178,14 +178,26 @@ the grant set is empty.** Omitting the key because there are no grants fails
 open and hands the process everything. There is no wildcard value, and unknown
 entries are dropped rather than trusted, so a grant cannot widen itself by typo.
 
-### Per-process isolation is required, not optional
+### Account isolation
 
-One process cannot safely serve two identities. GMCP binds the active account
-into process-global state — `him`'s `use_api` writes a class-level ivar on
-`Gmail::Message` and friends — so `with_account` mutates a shared global rather
-than establishing isolation. Scope by **spawning one GMCP process per (identity,
-account set)** with `GMCP_ACCOUNTS` and `GMCP_CAPABILITIES` set for that
-identity. Do not run a shared instance and scope per call.
+Models are bound to a *resolver*, not to a concrete API: `him` calls `use_api`
+at request time if it responds to `:call`, so `GMCP::ApiBinding` installs a
+lambda once and swaps the account per fiber via `Thread.current`.
+`Server.with_account` scopes a binding to a block and restores whatever was
+bound before, so two concurrent tool calls for different accounts cannot see
+each other's APIs, and a nested call cannot leak its account to its caller.
+
+A request with nothing bound raises `ApiBinding::NotBound` rather than falling
+back to whichever account the previous caller happened to leave behind.
+
+This was not always true. Until 0.3.0 the account was written onto the model
+class itself, so isolation depended on never running two requests at once —
+which is not isolation, only an absence of opportunity. Per-process separation
+was the recommendation because it was the only thing that actually held.
+
+**Capability separation is still per-process**, because `GMCP_CAPABILITIES` is
+read once at startup and decides which tools get registered at all. One process
+per capability set; that process may now serve several accounts safely.
 
 ### Connectors and account scoping
 

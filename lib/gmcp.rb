@@ -13,6 +13,7 @@ module GMCP
   autoload :Auth,             'gmcp/auth'
   autoload :BearerMiddleware, 'gmcp/bearer_middleware'
   autoload :Apis,             'gmcp/apis'
+  autoload :ApiBinding,       'gmcp/api_binding'
   autoload :AccountRegistry,  'gmcp/account_registry'
   autoload :Capabilities,     'gmcp/capabilities'
   autoload :ToolHelpers,      'gmcp/tool_helpers'

@@ -15,17 +15,20 @@ module GMCP
       registry.reinitialize!(account: account)
     end
 
-    # Returns nil if account is ready, or an MCP error Response if not authorized.
+    # Returns nil if account is ready, or an MCP error Response if not
+    # authorized. Binds for the rest of the fiber; prefer with_account, which
+    # scopes the binding to a block.
     def self.use_account(account)
       msg = registry.activate(account)
       msg && ToolHelpers.text_response(msg)
     end
 
-    def self.with_account(account)
-      auth_err = use_account(account)
-      return auth_err if auth_err
-
-      yield
+    # Runs the block with `account` bound for the duration, restoring whatever
+    # was bound before. The binding is fiber-local, so two concurrent tool calls
+    # for different accounts cannot see each other's APIs.
+    def self.with_account(account, &block)
+      error, result = registry.scoped(account, &block)
+      error ? ToolHelpers.text_response(error) : result
     end
 
     def self.build_server
