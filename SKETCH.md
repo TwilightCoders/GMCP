@@ -100,7 +100,7 @@ spec.add_dependency "ergane", "~> 0.1"        # CLI layer
       "command": "ruby",
       "args": ["/path/to/GMCP/bin/gmcp"],
       "env": {
-        "GMCP_ACCOUNT": "personal@example.com"
+        "GMCP_ACCOUNT": "you@example.com"
       }
     }
   }

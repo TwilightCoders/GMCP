@@ -24,7 +24,11 @@ module GMCP
 
       API_HOST = 'https://clients6.google.com'
       API_PATH = '/voice/v1/voiceclient/'
-      API_KEY  = 'AIzaSyDTYc1N4xiODyrQYK0Kl6g_y279LjYkrBg'
+      # Browser API key published in the voice.google.com page source — it is
+      # not a secret and identifies Google's own web client, not the user.
+      # Overridable because Google can rotate it at any time, and a rotation
+      # should not require editing the gem.
+      API_KEY  = ENV.fetch('GMCP_VOICE_API_KEY', 'AIzaSyDTYc1N4xiODyrQYK0Kl6g_y279LjYkrBg')
       ORIGIN   = 'https://voice.google.com'
 
       # Cookies the browser sends to google.com on every request.
@@ -54,6 +58,10 @@ module GMCP
           path: cookie_path || SafariCookies::DEFAULT_PATH
         )
         raise AuthError, 'Missing SAPISID cookie — log into Google in Safari first' unless @cookies['SAPISID']
+      rescue SafariCookies::Unavailable, SafariCookies::ParseError => e
+        # Surface as AuthError so the tool layer reports it as readable text
+        # rather than letting it escape as an MCP internal error.
+        raise AuthError, e.message
       end
 
       # Call a Voice API method. `path` is something like "account/get" or

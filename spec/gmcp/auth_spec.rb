@@ -5,8 +5,8 @@ require 'spec_helper'
 describe GMCP::Auth do
   describe '.token_path' do
     it 'returns path under ~/.config/gmcp/<account>/' do
-      path = described_class.token_path('you@example.com')
-      expect(path).to end_with('/you@example.com/token.yaml')
+      path = described_class.token_path('user@example.com')
+      expect(path).to end_with('/user@example.com/token.yaml')
       expect(path).to include('.config/gmcp')
     end
 

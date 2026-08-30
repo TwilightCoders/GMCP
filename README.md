@@ -72,11 +72,11 @@ For multiple accounts:
   "mcpServers": {
     "gmcp-personal": {
       "command": "/path/to/GMCP/bin/gmcp",
-      "env": { "GMCP_ACCOUNT": "you@gmail.com" }
+      "env": { "GMCP_ACCOUNT": "personal@example.com" }
     },
     "gmcp-work": {
       "command": "/path/to/GMCP/bin/gmcp",
-      "env": { "GMCP_ACCOUNT": "you@company.com" }
+      "env": { "GMCP_ACCOUNT": "work@example.com" }
     }
   }
 }
@@ -84,7 +84,9 @@ For multiple accounts:
 
 ### 4. Authorize from Claude
 
-Once the server is wired up, ask Claude to call `gmcp_authorize`. It will return a URL — open it in your browser, approve access, copy the code, then call `gmcp_authorize` again with the code. Tokens are stored at `~/.config/gmcp/<account>/token.yaml` and auto-refresh on subsequent runs.
+Ask Claude to call `gmcp_authorize`, or run `bin/gmcp-auth <account>` from a terminal. Either opens your browser and captures the redirect on a temporary local callback server — there is nothing to copy and paste. (Google retired the out-of-band code flow in 2022.)
+
+Tokens are stored at `~/.config/gmcp/<account>/token.yaml` and refresh automatically. If a refresh token is revoked, the server still starts — the account is left unbound and reports that it needs re-authorizing, rather than taking the whole server down.
 
 ## Multiple accounts and capability scoping
 

@@ -3,8 +3,7 @@ require_relative 'lib/gmcp/version'
 Gem::Specification.new do |spec|
   spec.name          = 'gmcp'
   spec.version       = GMCP::VERSION
-  spec.authors       = ['Dale Stevens']
-  spec.email         = ['dale@twilightcoders.net']
+  spec.authors       = ['TwilightCoders']
 
   spec.summary       = 'Google Workspace MCP server (Gmail, Calendar, Drive) for Claude Code'
   spec.description   = 'A Ruby MCP server providing full-access Google Workspace tools — Gmail (read, label, trash, send), Calendar (read/write events), and Drive (read). Built on the him REST ORM and the official mcp Ruby SDK.'

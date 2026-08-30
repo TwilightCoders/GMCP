@@ -19,7 +19,26 @@ module GMCP
 
       class ParseError < StandardError; end
 
+      # Raised when this machine cannot supply Safari cookies at all — a
+      # non-macOS host, or a Mac where Safari has never stored any. Distinct
+      # from ParseError, which means the file exists but is not what we expect.
+      class Unavailable < StandardError; end
+
+      def self.available?
+        RbConfig::CONFIG['host_os'].to_s.match?(/darwin/) && File.exist?(DEFAULT_PATH)
+      end
+
       def self.read(domain:, names: nil, path: DEFAULT_PATH)
+        unless RbConfig::CONFIG['host_os'].to_s.match?(/darwin/)
+          raise Unavailable,
+                'Google Voice support reads Safari session cookies and therefore ' \
+                'only works on macOS. This host is not macOS.'
+        end
+        unless File.exist?(path)
+          raise Unavailable,
+                "No Safari cookie store at #{path}. Sign in to Google in Safari on this machine first."
+        end
+
         data = File.binread(path)
         raise ParseError, "Bad magic in #{path}" unless data[0, 4] == 'cook'
 
