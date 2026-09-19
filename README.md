@@ -35,6 +35,20 @@ server with full `gmail.modify`, `calendar.events`, and `drive.readonly` scopes.
 4. Under **APIs & Services → Credentials**, create an OAuth 2.0 Client ID
    - Application type: **Desktop app**
 5. Download the JSON file and save it to `~/.config/gmcp/credentials.json`
+6. Under **Google Auth Platform → Audience**, click **Publish app**
+
+Step 6 is not optional for day-to-day use. While the consent screen is in
+**Testing**, Google expires every refresh token after **7 days**, so each account
+silently stops working about a week after you authorize it and the server reports
+`invalid_grant`. Publishing to **In production** removes that expiry.
+
+Publishing is not the same as verification. An unverified production app still
+shows a "Google hasn't verified this app" interstitial (**Advanced → Go to …**)
+on each authorization, and is capped at 100 users. Full verification of the
+restricted `gmail.modify` scope requires an annual third-party security
+assessment, which is not worth doing for a personal install — accept the
+interstitial.
+
 
 ### 2. Install
 
@@ -50,37 +64,32 @@ cd ~/.gmcp && bundle install
 
 ### 3. Wire up Claude Code
 
-Add to your Claude Code `settings.json` (usually `~/.claude/settings.json`):
+MCP servers are configured in `.claude.json`, not `settings.json`. Let the CLI
+write it so it lands in the config directory your sessions actually read
+(`$CLAUDE_CONFIG_DIR/.claude.json` when that is set, `~/.claude.json` otherwise):
 
-```json
-{
-  "mcpServers": {
-    "gmcp": {
-      "command": "/path/to/GMCP/bin/gmcp",
-      "env": {
-        "GMCP_ACCOUNT": "you@example.com"
-      }
-    }
-  }
-}
+```sh
+GMCP=~/.gmcp   # wherever you cloned it
+
+claude mcp add gmcp --scope user \
+  --env "GMCP_ACCOUNTS=you@example.com,work@example.com" \
+  --env "GMCP_CAPABILITIES=gmcp.authorize,gmail.read,calendar.read,drive.read" \
+  --env "BUNDLE_GEMFILE=$GMCP/Gemfile" \
+  -- "$(which ruby)" "$GMCP/bin/gmcp"
 ```
 
-For multiple accounts:
+`--scope user` registers it for every session on the machine; `--scope project`
+writes a `.mcp.json` next to a single repo, which is how you give one project a
+wider grant than the default (see **`GMCP_CAPABILITIES`** below).
 
-```json
-{
-  "mcpServers": {
-    "gmcp-personal": {
-      "command": "/path/to/GMCP/bin/gmcp",
-      "env": { "GMCP_ACCOUNT": "personal@example.com" }
-    },
-    "gmcp-work": {
-      "command": "/path/to/GMCP/bin/gmcp",
-      "env": { "GMCP_ACCOUNT": "work@example.com" }
-    }
-  }
-}
-```
+If you use a Ruby version manager, point the command at its shim rather than a
+versioned binary, so a Ruby upgrade does not silently break every session. With
+`rbenv`, add `--env "RBENV_DIR=$GMCP"` and the shim resolves the version from
+GMCP's own `.ruby-version`, regardless of which directory the session runs in.
+
+Verify with `claude mcp get gmcp`. On startup the server prints its accounts and
+capabilities to stderr — that stderr is the only place an operator can see what a
+given process was actually granted.
 
 ### 4. Authorize from Claude
 

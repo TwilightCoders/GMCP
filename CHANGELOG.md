@@ -3,6 +3,49 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.1]
+
+### Fixed
+
+- **Setup instructions pointed at the wrong file and the wrong variable.**
+  README told you to register the server in `settings.json`; MCP servers are
+  configured in `.claude.json`, and which `.claude.json` depends on
+  `CLAUDE_CONFIG_DIR`. A registration written to the wrong one is not reported
+  as an error — the server simply never appears in `claude mcp list`, and every
+  session runs without it. Step 3 now uses `claude mcp add`, which resolves the
+  config directory itself, and shows `--scope project` as the way to widen one
+  repo's grant past the machine default.
+
+- The same section's examples used `GMCP_ACCOUNT` (singular), which is only a
+  legacy fallback, and presented one process per account as the way to serve
+  several accounts. One process serves them all via `GMCP_ACCOUNTS`; separate
+  processes are for separating *capabilities*, which is what the rest of the
+  README already said.
+
+- Startup notice said "voice.read reach the voice principal" when exactly one
+  unscoped capability was granted.
+
+### Added
+
+- README documents that the OAuth consent screen must be published. Left in
+  **Testing**, Google expires every refresh token after 7 days, so accounts stop
+  working about a week after authorization with `invalid_grant` and nothing
+  explains why. Also records what publishing does *not* do: an unverified
+  production app still shows the "Google hasn't verified this app" interstitial,
+  and verifying the restricted `gmail.modify` scope needs an annual third-party
+  security assessment not worth doing for a personal install.
+
+- README notes that a version-manager shim (with `RBENV_DIR`) should be
+  preferred over a versioned Ruby path, so a Ruby upgrade does not break every
+  session at once.
+
+### Removed
+
+- `SKETCH.md`, the pre-implementation design sketch. Every open question in it
+  has been answered and most of its particulars are now wrong — `token.json`
+  (it is `token.yaml`), `scopes.yml` (it is `config/capabilities.yml`), a
+  `cli.rb` that was never built. README and CHANGELOG carry the current truth.
+
 ## [0.3.0]
 
 ### Fixed
