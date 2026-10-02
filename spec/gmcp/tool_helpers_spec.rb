@@ -76,4 +76,42 @@ RSpec.describe GMCP::ToolHelpers do
       define('gmail.read')
     end
   end
+
+  describe '.json_response' do
+    def body_of(response)
+      response.content.first[:text]
+    end
+
+    # Him::Model does not include ActiveModel::Serializers::JSON, so a bare
+    # to_json on one resolves to Object#to_json and yields the inspect string.
+    # The tool then returns "#<GMCP::Gmail::Message:0x...>" and nothing else,
+    # which is indistinguishable from success to a caller.
+    it 'serializes a Him model by its attributes, not its object identity' do
+      model = GMCP::Gmail::Message.new(id: 'abc123', snippet: 'hello', labelIds: %w[INBOX])
+
+      parsed = JSON.parse(body_of(described_class.json_response(model)))
+
+      expect(parsed).to include('id' => 'abc123', 'snippet' => 'hello', 'labelIds' => %w[INBOX])
+    end
+
+    it 'never emits an inspect string for a Him model' do
+      model = GMCP::Gmail::Message.new(id: 'abc123')
+
+      expect(body_of(described_class.json_response(model))).not_to include('#<')
+    end
+
+    it 'serializes a plain hash unchanged' do
+      parsed = JSON.parse(body_of(described_class.json_response({ a: 1, b: %w[x y] })))
+
+      expect(parsed).to eq({ 'a' => 1, 'b' => %w[x y] })
+    end
+
+    it 'serializes an array of Him models by their attributes' do
+      models = [GMCP::Gmail::Message.new(id: 'one'), GMCP::Gmail::Message.new(id: 'two')]
+
+      parsed = JSON.parse(body_of(described_class.json_response(models)))
+
+      expect(parsed.map { |m| m['id'] }).to eq(%w[one two])
+    end
+  end
 end

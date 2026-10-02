@@ -42,7 +42,7 @@ module GMCP
           server,
           name: 'gmail_get_message',
           capability: 'gmail.read',
-          description: 'Get a Gmail message by ID',
+          description: 'Get a Gmail message by ID, with decoded headers and body text',
           properties: {
             message_id: { type: 'string' },
             **ToolHelpers::ACCOUNT_PARAM
@@ -50,7 +50,7 @@ module GMCP
           required: ['message_id']
         ) do |message_id:, account: nil|
           GMCP::Server.with_account(account) do
-            ToolHelpers.json_response(Message.find(message_id))
+            ToolHelpers.json_response(Message.find(message_id).to_summary)
           end
         end
 

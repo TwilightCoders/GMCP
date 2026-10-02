@@ -15,6 +15,61 @@ module GMCP
       # Gmail caps batchModify at 1000 ids per call.
       BATCH_LIMIT = 1000
 
+      # Gmail hands back headers as a flat array of {name:, value:} pairs and
+      # the body as base64url leaves of a MIME tree. A caller that receives
+      # either raw has to do this decoding itself, which is exactly what
+      # happened before these existed.
+      #
+      # Keys arrive as symbols through `him`, but hand-built and fixture
+      # payloads use strings, so every reader below tolerates both.
+
+      SUMMARY_HEADERS = %w[From To Cc Bcc Reply-To Date Subject].freeze
+
+      # Every header on the message, keyed by the name Gmail reported.
+      def headers
+        @headers ||= (payload_fetch(:headers) || []).each_with_object({}) do |entry, acc|
+          next unless entry.is_a?(Hash)
+
+          name = entry[:name] || entry['name']
+          acc[name.to_s] = (entry[:value] || entry['value']).to_s if name
+        end
+      end
+
+      # Senders disagree about header casing — the same header arrives as
+      # Message-ID, Message-Id and message-id depending on who sent it — so an
+      # exact-match lookup silently misses.
+      def header(name)
+        key = headers.keys.find { |candidate| candidate.casecmp?(name.to_s) }
+        key && headers[key]
+      end
+
+      # The message body as readable text. Prefers text/plain; falls back to
+      # text/html with markup stripped, because a great deal of mail (most
+      # marketing mail) ships no plain part at all, and returning nil for it
+      # would make this useless for the mail it is most often pointed at.
+      def body_text
+        part_text('text/plain') || strip_html(part_text('text/html'))
+      end
+
+      # What a caller actually wants from "get me this message": the ids needed
+      # for follow-up calls, the headers worth reading, and a decoded body —
+      # not the raw MIME tree.
+      def to_summary
+        summary = {
+          id:        id,
+          thread_id: threadId,
+          label_ids: labelIds,
+          snippet:   snippet
+        }
+        SUMMARY_HEADERS.each do |name|
+          value = header(name)
+          summary[name.downcase.tr('-', '_').to_sym] = value if value
+        end
+        summary[:body]    = body_text
+        summary[:headers] = headers
+        summary
+      end
+
       def trash!
         self.class.post_raw("messages/#{id}/trash", {})
       end
@@ -46,6 +101,100 @@ module GMCP
           raw:      Base64.urlsafe_encode64(raw),
           threadId: threadId
         })
+      end
+
+
+      private
+
+      def payload_fetch(key)
+        hash = payload
+        return nil unless hash.is_a?(Hash)
+
+        hash[key] || hash[key.to_s]
+      end
+
+      # Depth-first search for the first non-blank part of `mime_type`.
+      def part_text(mime_type, part = payload)
+        return nil unless part.is_a?(Hash)
+
+        mime = part[:mimeType] || part['mimeType']
+        if mime == mime_type
+          body = part[:body] || part['body'] || {}
+          decoded = decode_part(body[:data] || body['data'], part)
+          return decoded if decoded
+        end
+
+        (part[:parts] || part['parts'] || []).each do |sub|
+          found = part_text(mime_type, sub)
+          return found if found
+        end
+        nil
+      end
+
+      # A part carrying undecodable bytes should not take the whole tool call
+      # down, and a blank part should not mask a populated one of another type.
+      def decode_part(data, part = nil)
+        return nil if data.nil? || data.to_s.empty?
+
+        text = to_utf8(Base64.urlsafe_decode64(data), charset_of(part))
+        text.strip.empty? ? nil : text
+      rescue ArgumentError
+        nil
+      end
+
+      # The part's own Content-Type carries the charset. Without it a
+      # Windows-1252 or Latin-1 body — still common in bulk mail — decodes to
+      # mojibake.
+      def charset_of(part)
+        return nil unless part.is_a?(Hash)
+
+        entries = part[:headers] || part['headers'] || []
+        entry = entries.find do |h|
+          h.is_a?(Hash) && (h[:name] || h['name']).to_s.casecmp?('Content-Type')
+        end
+        value = entry && (entry[:value] || entry['value'])
+        value.to_s[/charset=["']?([\w.:-]+)/i, 1]
+      end
+
+      # Base64.urlsafe_decode64 hands back ASCII-8BIT whatever the bytes are.
+      # Left that way, JSON.generate warns on json 2.x and raises on 3.0.
+      def to_utf8(text, charset)
+        source = Encoding.find(charset || 'UTF-8')
+        text = text.dup.force_encoding(source)
+
+        # encode is a no-op when source == destination, so it will not scrub
+        # invalid bytes out of a part that merely claims to be UTF-8.
+        if source == Encoding::UTF_8
+          text.valid_encoding? ? text : text.scrub('')
+        else
+          text.encode(Encoding::UTF_8, invalid: :replace, undef: :replace)
+        end
+      rescue ArgumentError, Encoding::ConverterNotFoundError
+        text.dup.force_encoding(Encoding::UTF_8).scrub('')
+      end
+
+      HTML_ENTITIES = {
+        '&nbsp;' => ' ', '&lt;' => '<', '&gt;' => '>',
+        '&quot;' => '"', '&#39;' => "'", '&apos;' => "'"
+      }.freeze
+
+      # Enough to make an html-only message readable. Not a parser, and not
+      # trying to be — the alternative on offer is handing back raw markup.
+      def strip_html(html)
+        return nil if html.nil?
+
+        text = html.dup
+        text.gsub!(%r{<(script|style)\b[^>]*>.*?</\1>}mi, ' ')
+        text.gsub!(%r{<br\s*/?>}i, "\n")
+        text.gsub!(%r{</(p|div|tr|li|h[1-6]|blockquote|table)>}i, "\n\n")
+        text.gsub!(/<[^>]*>/m, '')
+        HTML_ENTITIES.each { |entity, char| text.gsub!(entity, char) }
+        text.gsub!('&amp;', '&')     # last, so &amp;lt; does not become <
+        text.gsub!(/[ \t]+/, ' ')
+        text.gsub!(/ *\n */, "\n")
+        text.gsub!(/\n{3,}/, "\n\n")
+        text.strip!
+        text.empty? ? nil : text
       end
 
       class << self

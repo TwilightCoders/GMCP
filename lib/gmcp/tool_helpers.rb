@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'mcp'
+require 'json'
 
 module GMCP
   module ToolHelpers
@@ -15,8 +16,23 @@ module GMCP
       MCP::Tool::Response.new([{ type: 'text', text: text }])
     end
 
+    # Him models do not include ActiveModel::Serializers::JSON, so `to_json` on
+    # one resolves to Object#to_json and yields the inspect string —
+    # "#<GMCP::Gmail::Message:0x...>". That is valid JSON and completely empty
+    # of the record, so a caller cannot tell it from success. Serialize by
+    # attributes instead, recursing so a collection of models does not hit the
+    # same wall one level down.
     def self.json_response(object)
-      text_response(object.to_json)
+      text_response(JSON.pretty_generate(serializable(object)))
+    end
+
+    def self.serializable(object)
+      case object
+      when Array then object.map { |item| serializable(item) }
+      when Hash  then object.to_h { |key, value| [key, serializable(value)] }
+      else
+        object.respond_to?(:attributes) ? serializable(object.attributes) : object
+      end
     end
 
     # Registers a tool, unless `capability:` names a capability this process was

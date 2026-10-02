@@ -3,6 +3,47 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0]
+
+### Fixed
+
+- **`gmail_get_message` and `calendar_get_event` returned an object id instead
+  of the record.** `ToolHelpers.json_response` called `to_json` on a
+  `Him::Model`, which does not include `ActiveModel::Serializers::JSON`, so the
+  call resolved to `Object#to_json` and produced the inspect string —
+  `"#<GMCP::Gmail::Message:0x0000000125404b08>"`. That is well-formed JSON
+  carrying none of the message, so a caller could not distinguish it from
+  success; the tool was unusable for reading mail while appearing to work.
+  `json_response` now serializes by `attributes`, recursing through arrays and
+  hashes so a collection does not hit the same wall one level down.
+
+- **Decoded message bodies were tagged `ASCII-8BIT`.**
+  `Base64.urlsafe_decode64` returns binary regardless of the bytes, which made
+  `JSON.generate` warn on json 2.x and will make it raise on 3.0, and rendered
+  any non-UTF-8 body as mojibake. Bodies are now transcoded from the charset
+  declared on the part's own `Content-Type`, defaulting to UTF-8, with invalid
+  bytes replaced rather than raised on. A part claiming UTF-8 is scrubbed
+  explicitly, since `String#encode` is a no-op when source and destination
+  encodings match and therefore does not clean such a part.
+
+### Added
+
+- `Gmail::Message#headers` and `#header(name)` — the `{name:, value:}` array
+  Gmail returns, flattened to a hash, with case-insensitive lookup. Senders
+  disagree about header casing (`Message-ID` / `Message-Id` / `message-id`), so
+  an exact-match lookup silently misses.
+
+- `Gmail::Message#body_text` — the body as readable text. Walks the MIME tree
+  for `text/plain`, falling back to `text/html` with script and style blocks
+  dropped, block tags turned into line breaks, remaining markup stripped and
+  entities unescaped. The fallback matters because a large share of mail ships
+  no plain part at all.
+
+- `Gmail::Message#to_summary` — the ids needed for follow-up calls, the common
+  headers lifted to the top level, every header under `:headers`, and a decoded
+  body. `gmail_get_message` now returns this instead of the raw payload, so
+  callers no longer hand-decode base64url MIME leaves to read a message.
+
 ## [0.3.1]
 
 ### Fixed
@@ -42,9 +83,10 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 ### Removed
 
 - `SKETCH.md`, the pre-implementation design sketch. Every open question in it
-  has been answered and most of its particulars are now wrong — `token.json`
-  (it is `token.yaml`), `scopes.yml` (it is `config/capabilities.yml`), a
-  `cli.rb` that was never built. README and CHANGELOG carry the current truth.
+  has been answered and several of its particulars are now wrong — `token.json`
+  (it is `token.yaml`), a `cli.rb` that was never built, and an architecture
+  tree predating `capabilities.yml`, `api_binding.rb` and the whole Voice
+  module. README and CHANGELOG carry the current truth.
 
 ## [0.3.0]
 
