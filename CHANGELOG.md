@@ -26,6 +26,13 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   explicitly, since `String#encode` is a no-op when source and destination
   encodings match and therefore does not clean such a part.
 
+### Changed
+
+- `him` now resolves from RubyGems rather than a git pin. The published
+  `him` 0.1.0 is identical to the revision previously pinned, so this changes
+  nothing at runtime — but a git-sourced dependency cannot be expressed in a
+  gemspec, and it was the only thing preventing `gem install gmcp`.
+
 ### Added
 
 - `Gmail::Message#headers` and `#header(name)` — the `{name:, value:}` array

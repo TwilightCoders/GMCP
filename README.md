@@ -53,7 +53,7 @@ interstitial.
 ### 2. Install
 
 ```bash
-gem install gmcp     # once published — until then, use path install below
+gem install gmcp
 ```
 
 Or from source:
