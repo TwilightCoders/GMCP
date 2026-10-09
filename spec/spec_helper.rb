@@ -1,6 +1,8 @@
 require 'gmcp'
 require 'pry-byebug'
 
+Dir[File.join(__dir__, 'support', '*.rb')].each { |f| require f }
+
 RSpec.configure do |config|
   config.order = 'random'
   config.filter_run_when_matching :focus
