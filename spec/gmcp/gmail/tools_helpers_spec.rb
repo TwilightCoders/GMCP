@@ -21,6 +21,7 @@ describe GMCP::Gmail::Tools do
       called = false
       r = described_class.batching([]) { called = true }
       expect(called).to be(false)
+      expect(r.error?).to be(true)
       expect(text_of(r)).to match(/No message ids/)
     end
 
@@ -30,14 +31,9 @@ describe GMCP::Gmail::Tools do
       expect(called).to be(false)
     end
 
-    it 'reports a refused batch as readable text, not an exception' do
-      r = described_class.batching(%w[a]) { raise ArgumentError, 'exceeds the limit' }
-      expect(text_of(r)).to match(/Refused: exceeds the limit/)
-    end
-
-    it 'reports an API failure as readable text, not an MCP internal error' do
-      r = described_class.batching(%w[a]) { raise 'boom' }
-      expect(text_of(r)).to match(/Batch failed: RuntimeError: boom/)
+    it 'leaves failures to ToolHelpers.guarded' do
+      expect { described_class.batching(%w[a]) { raise ArgumentError, 'exceeds the limit' } }
+        .to raise_error(ArgumentError)
     end
   end
 

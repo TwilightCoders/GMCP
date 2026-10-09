@@ -197,7 +197,7 @@ module GMCP
           required: ['message_ids']
         ) do |message_ids:, add_label_ids: [], remove_label_ids: []|
           if add_label_ids.empty? && remove_label_ids.empty?
-            next ToolHelpers.text_response('Nothing to do: no labels to add or remove.')
+            next ToolHelpers.error_response('Nothing to do: no labels to add or remove.')
           end
           Tools.batching(message_ids) do |ids|
             Message.batch_modify(ids: ids, add_label_ids: add_label_ids, remove_label_ids: remove_label_ids)
@@ -280,16 +280,14 @@ module GMCP
           },
           required: ['message_id']
         ) do |message_id:|
-          begin
-            code = Unsubscribe.one_click!(message_id)
-            ToolHelpers.text_response("Unsubscribe request accepted (HTTP #{code}).")
-          rescue Unsubscribe::NotSupported => e
-            ToolHelpers.text_response("Cannot one-click unsubscribe: #{e.message}")
-          rescue Unsubscribe::Failed => e
-            ToolHelpers.text_response("Unsubscribe failed: #{e.message}")
-          rescue StandardError => e
-            ToolHelpers.text_response("Unsubscribe error: #{e.class}: #{e.message}")
-          end
+          code = Unsubscribe.one_click!(message_id)
+          ToolHelpers.text_response("Unsubscribe request accepted (HTTP #{code}).")
+        # Expected outcomes, not faults: say what happened in the user's terms
+        # instead of guarded's class name and a backtrace on stderr.
+        rescue Unsubscribe::NotSupported => e
+          ToolHelpers.error_response("Cannot one-click unsubscribe: #{e.message}")
+        rescue Unsubscribe::Failed => e
+          ToolHelpers.error_response("Unsubscribe failed: #{e.message}")
         end
       end
 
@@ -311,18 +309,14 @@ module GMCP
           ToolHelpers.text_response(body)
         end
 
-        # Shared shape for the batch tools: reject an empty set, surface
-        # Gmail's own limit rather than truncating, and report failures as
-        # readable text instead of an MCP internal error.
+        # Shared shape for the batch tools: clean the id set and refuse an
+        # empty one before any request. Gmail's own limit is enforced, not
+        # truncated, by Message.batch_modify.
         def batching(ids)
           ids = Array(ids).map { |i| i.to_s.strip }.reject(&:empty?).uniq
-          return ToolHelpers.text_response('No message ids given.') if ids.empty?
+          return ToolHelpers.error_response('No message ids given.') if ids.empty?
 
           ToolHelpers.text_response(yield(ids))
-        rescue ArgumentError => e
-          ToolHelpers.text_response("Refused: #{e.message}")
-        rescue StandardError => e
-          ToolHelpers.text_response("Batch failed: #{e.class}: #{e.message}")
         end
 
         # part_id is the normal route: one listing yields both the filename and
