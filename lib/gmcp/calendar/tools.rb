@@ -1,4 +1,5 @@
 require 'mcp'
+require 'time'
 
 module GMCP
   module Calendar
@@ -24,12 +25,15 @@ module GMCP
                        'Returns a page_token when more results exist; pass it back to get the next page.',
           properties: {
             calendar_id: { type: 'string', description: 'Calendar ID (default: primary)' },
-            time_min:    { type: 'string', description: 'RFC3339 start of range, e.g. 2025-01-01T00:00:00Z' },
+            time_min:    { type: 'string', description: 'RFC3339 start of range (default: now), e.g. 2025-01-01T00:00:00Z' },
             time_max:    { type: 'string', description: 'RFC3339 end of range' },
             max_results: { type: 'integer' },
             page_token:  { type: 'string', description: 'Cursor from a previous call. Omit for the first page.' }
           }
         ) do |calendar_id: 'primary', time_min: nil, time_max: nil, max_results: 20, page_token: nil|
+          # Without a lower bound Google starts at the calendar's first event,
+          # which can be decades back; "list events" means upcoming ones.
+          time_min ||= Time.now.utc.iso8601
           page = Event.list_page(calendar_id: calendar_id, time_min: time_min, time_max: time_max,
                                  max_results: max_results, page_token: page_token)
           lines = page[:events].map { |e| "#{e.id}: #{e.summary} (#{e.starts_at})" }
