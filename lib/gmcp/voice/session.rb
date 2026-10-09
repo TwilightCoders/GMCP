@@ -55,7 +55,7 @@ module GMCP
         @cookies = cookies || SafariCookies.read(
           domain: '.google.com',
           names: SESSION_COOKIE_NAMES,
-          path: cookie_path || SafariCookies::DEFAULT_PATH
+          path: cookie_path
         )
         raise AuthError, 'Missing SAPISID cookie — log into Google in Safari first' unless @cookies['SAPISID']
       rescue SafariCookies::Unavailable, SafariCookies::ParseError => e
