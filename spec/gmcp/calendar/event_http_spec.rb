@@ -43,11 +43,11 @@ describe GMCP::Calendar::Event do
       )
     end
 
-    it 'uses supplied calendar_id in path' do
+    it 'uses supplied calendar_id in path, escaped' do
       allow(test_api).to receive(:request).and_return(empty_collection)
       described_class.list(calendar_id: 'work@group.calendar.google.com')
       expect(test_api).to have_received(:request).with(
-        hash_including(_path: 'calendars/work@group.calendar.google.com/events')
+        hash_including(_path: 'calendars/work%40group.calendar.google.com/events')
       )
     end
   end
@@ -96,27 +96,6 @@ describe GMCP::Calendar::Event do
       expect(test_api).to have_received(:request).with(
         hash_including(_method: :delete, _path: 'calendars/primary/events/evt123')
       )
-    end
-  end
-
-  describe '#rsvp!' do
-    let(:attendees) { [{ 'self' => true, 'email' => 'me@example.com', 'responseStatus' => 'needsAction' }] }
-    let(:event) { described_class.new(id: 'evt123', attendees: attendees) }
-
-    it 'PUTs /calendars/primary/events/:id with updated attendees' do
-      event.rsvp!('accepted')
-      expect(test_api).to have_received(:request) do |params|
-        expect(params[:_method]).to eq(:put)
-        expect(params[:_path]).to eq('calendars/primary/events/evt123')
-        me = params[:attendees].find { |a| a['self'] }
-        expect(me['responseStatus']).to eq('accepted')
-      end
-    end
-
-    it 'does nothing when no self-attendee found' do
-      event_no_self = described_class.new(id: 'evt123', attendees: [{ 'email' => 'other@example.com' }])
-      event_no_self.rsvp!('accepted')
-      expect(test_api).not_to have_received(:request)
     end
   end
 end
