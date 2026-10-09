@@ -34,6 +34,45 @@ describe GMCP::Gmail::Unsubscribe do
       expect(described_class.info('m1')[:https]).to eq('https://ex.com/u')
     end
 
+    it 'returns the header exactly as sent' do
+      header = '<mailto:x@y.z?subject=unsub>, <https://ex.com/u/abc>'
+      stub_headers([['List-Unsubscribe', header]])
+      expect(described_class.info('m1')[:raw]).to eq(header)
+    end
+
+    it 'splits and trims a bracketless list with several entries' do
+      stub_headers([['List-Unsubscribe', ' mailto:x@y.z ,  https://ex.com/u ']])
+      i = described_class.info('m1')
+      expect(i[:mailto]).to eq('mailto:x@y.z')
+      expect(i[:https]).to eq('https://ex.com/u')
+    end
+
+    it 'keeps commas inside a bracketed URI' do
+      stub_headers([['List-Unsubscribe', '<https://ex.com/u?a=1,2>']])
+      expect(described_class.info('m1')[:https]).to eq('https://ex.com/u?a=1,2')
+    end
+
+    it 'matches the header names case-insensitively' do
+      stub_headers([['list-unsubscribe', '<https://ex.com/u>'], ['LIST-UNSUBSCRIBE-POST', 'List-Unsubscribe=One-Click']])
+      i = described_class.info('m1')
+      expect(i[:https]).to eq('https://ex.com/u')
+      expect(i[:one_click]).to be(true)
+    end
+
+    it 'treats a blank header as absent' do
+      stub_headers([['List-Unsubscribe', '  ']])
+      expect(described_class.info('m1')).to be_nil
+    end
+
+    it 'fetches only the two headers it reads' do
+      google.get('/gmail/v1/users/me/messages/m1') do |env|
+        expect(env.url.query).to include('format=metadata', 'metadataHeaders=List-Unsubscribe',
+                                         'metadataHeaders=List-Unsubscribe-Post', 'fields=')
+        json(payload: { headers: [{ name: 'List-Unsubscribe', value: '<https://ex.com/u>' }] })
+      end
+      expect(with_google { described_class.info('m1') }[:https]).to eq('https://ex.com/u')
+    end
+
     it 'keeps a plaintext http entry visible rather than hiding it' do
       stub_headers([['List-Unsubscribe', '<http://ex.com/u>']])
       i = described_class.info('m1')

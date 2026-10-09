@@ -27,6 +27,7 @@ module GMCP
       USER_AGENT     = 'GMCP'
       OPEN_TIMEOUT   = 10
       READ_TIMEOUT   = 20
+      HEADERS        = %w[List-Unsubscribe List-Unsubscribe-Post].freeze
 
       class NotSupported < StandardError; end
       class Failed       < StandardError; end
@@ -34,16 +35,8 @@ module GMCP
       # Returns { https:, mailto:, one_click:, raw: } — or nil if the message
       # carries no List-Unsubscribe header at all.
       def self.info(message_id)
-        headers = Message.get_raw("messages/#{message_id}", format: 'metadata') do |parsed, _r|
-          ((parsed[:data] || {})[:payload] || {})[:headers] || []
-        end
-
-        pick = lambda do |name|
-          h = headers.find { |x| (x[:name] || x['name']).to_s.downcase == name }
-          h && (h[:value] || h['value'])
-        end
-
-        raw = pick.call('list-unsubscribe')
+        message = Message.metadata(message_id, headers: HEADERS)
+        raw = message.header('List-Unsubscribe')
         return nil if raw.nil? || raw.to_s.strip.empty?
 
         uris = raw.to_s.scan(/<([^>]+)>/).flatten
@@ -53,7 +46,7 @@ module GMCP
           https:     uris.find { |u| u.start_with?('https://') },
           http:      uris.find { |u| u.start_with?('http://') },
           mailto:    uris.find { |u| u.start_with?('mailto:') },
-          one_click: pick.call('list-unsubscribe-post').to_s.downcase.include?('one-click'),
+          one_click: message.header('List-Unsubscribe-Post').to_s.downcase.include?('one-click'),
           raw:       raw
         }
       end
