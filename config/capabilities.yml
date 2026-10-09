@@ -3,27 +3,25 @@
 # SOURCE OF TRUTH for what GMCP can do. GMCP::Capabilities loads from here, and
 # spec/gmcp/capability_manifest_spec.rb asserts that every capability declared
 # here is claimed by exactly the tools listed and vice versa — so the manifest
-# cannot drift from the code without the suite going red. the host's
-# identity-permissions §2 requires capabilities be "declared by the connector,
-# never inferred"; a declaration that can drift is worse than an inference,
-# because it reads as authoritative while being wrong. The drift spec is what
+# cannot drift from the code without the suite going red. Capabilities should
+# be declared by the connector, never inferred; a declaration that can drift is
+# worse than an inference, because it reads as authoritative while being wrong. The drift spec is what
 # makes this file a fact about the connector rather than a claim by it.
 #
 # A static file (rather than a tool) also lets a registration UI read what a
 # connector COULD do without spawning it first.
 #
-# credential_source uses the identity-permissions §3 vocabulary verbatim
-# (local_file | keychain | delegated | none) rather than a GMCP dialect — §1 of
-# that doc is explicit that this codebase has already been bitten by one word
-# carrying several meanings. GMCP's OAuth tokens are local_file, at
-# ~/.config/gmcp/<account>/token.yaml. Voice is `delegated` per §11.2: a session
-# held by an application we do not run (Chrome). GMCP picks the Chrome profile
-# signed in as the requested account, so the principal is still constrained.
+# credential_source says where a connector's credential lives:
+# local_file | keychain | delegated | none. GMCP's OAuth tokens are local_file,
+# at ~/.config/gmcp/<account>/token.yaml. Voice is `delegated`: its session is
+# held by an application GMCP does not run (Chrome), though GMCP picks the
+# Chrome profile signed in as the requested account, so the principal is still
+# constrained.
 #
 # ── account_scoping ────────────────────────────────────────────────────────
 #
-# One GMCP process serves several of the host's "connectors", and they do not
-# share account semantics. Each declares which it has:
+# One GMCP process serves several connectors, and they do not share account
+# semantics. Each declares which it has:
 #
 #   enforced — GMCP_ACCOUNTS constrains which principal this connector reaches.
 #              A grant's connector_account means what it says.

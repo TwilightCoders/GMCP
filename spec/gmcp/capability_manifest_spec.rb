@@ -1,6 +1,6 @@
 require 'spec_helper'
 
-# config/capabilities.yml is what the host's registration UI reads to decide
+# config/capabilities.yml is what a registration UI reads to decide
 # what may be granted. If it drifts from the tools GMCP actually registers, the
 # UI offers grants that do nothing or hides ones that matter. These specs make
 # that drift impossible to commit.
@@ -103,7 +103,7 @@ RSpec.describe 'capability manifest' do
       end
     end
 
-    it 'gives every connector a credential_source from the §3 vocabulary' do
+    it 'gives every connector a known credential_source' do
       connectors.each do |c|
         expect(GMCP::Capabilities::CREDENTIAL_SOURCES).to include(c['credential_source']),
           "#{c['name']} declares credential_source #{c['credential_source'].inspect}"

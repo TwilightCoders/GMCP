@@ -5,8 +5,7 @@ require "yaml"
 module GMCP
   # Capability gating for tool registration.
   #
-  # GMCP is a connector in the host's identity-permissions model
-  # (a grant-based permission design). A grant there is
+  # GMCP fits a grant-based permission model in which a grant is
   # `(identity, connector_account, capabilities[])`. GMCP honors the two axes:
   #
   #   connector_account → GMCP_ACCOUNTS  (which mailboxes this process can reach)
@@ -39,7 +38,7 @@ module GMCP
       @manifest ||= YAML.load_file(GMCP.root(MANIFEST_PATH)).freeze
     end
 
-    # the host models gmail / google_calendar / drive / voice as separate
+    # gmail / google_calendar / drive / voice are separate
     # connectors. One GMCP process serves all of them, and they do NOT share
     # account semantics — see ACCOUNT_SCOPING.
     def self.connectors
@@ -53,8 +52,8 @@ module GMCP
     #              grant's connector_account is decorative for that connector.
     ACCOUNT_SCOPING = %w[enforced ignored].freeze
 
-    # identity-permissions §3 vocabulary, used verbatim rather than a GMCP
-    # dialect. Voice is `delegated` per §11.2: Chrome holds its session.
+    # Where a connector's credential lives. Voice is `delegated`: Chrome holds
+    # its session.
     CREDENTIAL_SOURCES = %w[local_file keychain delegated none].freeze
 
     def self.declared
