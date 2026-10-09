@@ -213,6 +213,14 @@ module GMCP
       # headers, without the rest of the payload.
       METADATA_FIELDS = 'id,threadId,labelIds,payload/headers'
 
+      # Partial response for .attachments: the part tree without the inline
+      # body data of every text part. A fields mask cannot recurse, so it
+      # spells the nesting out; ten levels is deeper than real mail goes.
+      ATTACHMENT_FIELDS = begin
+        part = 'partId,filename,mimeType,body(size,attachmentId)'
+        "payload(#{(1..10).reduce(part) { |inner, _| "#{part},parts(#{inner})" }})"
+      end
+
       # What a search result line shows.
       SEARCH_HEADERS = %w[From Subject Date].freeze
 
@@ -336,9 +344,18 @@ module GMCP
         # Attachment parts carry a filename and a body.attachmentId; inline
         # parts (and the text/plain + text/html bodies) carry neither, so this
         # returns only things a user would recognise as an attachment.
+        #
+        # Gmail issues a fresh attachmentId on every fetch, so one cannot be
+        # matched against an earlier listing. partId is stable.
         def attachments(message_id)
-          payload = get_raw("messages/#{message_id}", format: 'full') { |p, _r| (p[:data] || {})[:payload] } || {}
+          params  = { format: 'full', fields: ATTACHMENT_FIELDS }
+          payload = get_raw("messages/#{message_id}", params) { |p, _r| (p[:data] || {})[:payload] } || {}
           collect_attachment_parts(payload)
+        end
+
+        def attachment(message_id, part_id:)
+          attachments(message_id).find { |a| a[:part_id] == part_id.to_s } ||
+            raise(ArgumentError, "message #{message_id} has no attachment with part_id #{part_id}")
         end
 
         # Returns the raw decoded bytes. Callers decide where they land — the
@@ -373,6 +390,7 @@ module GMCP
 
           if att_id && filename && !filename.to_s.empty?
             acc << {
+              part_id:       part[:partId] || part['partId'],
               filename:      filename,
               mime_type:     part[:mimeType] || part['mimeType'],
               size:          body[:size] || body['size'],

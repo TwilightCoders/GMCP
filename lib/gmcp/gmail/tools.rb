@@ -212,7 +212,7 @@ module GMCP
           server,
           name: 'gmail_list_attachments',
           capability: 'gmail.read',
-          description: 'List the attachments on a message (filename, type, size, and the id needed to download it).',
+          description: 'List the attachments on a message: part_id (needed to download it), filename, type and size.',
           properties: {
             message_id: { type: 'string' }
           },
@@ -220,7 +220,7 @@ module GMCP
         ) do |message_id:|
           found = Message.attachments(message_id)
           ToolHelpers.list_response(found, empty_message: 'No attachments on this message.') do |a|
-            "#{a[:attachment_id]}  #{a[:filename]}  (#{a[:mime_type]}, #{a[:size]} bytes)"
+            "part_id #{a[:part_id]}  #{a[:filename]}  (#{a[:mime_type]}, #{a[:size]} bytes)"
           end
         end
 
@@ -228,17 +228,19 @@ module GMCP
           server,
           name: 'gmail_download_attachment',
           capability: 'gmail.download',
-          description: 'Download an attachment to a local directory. Get the attachment_id from gmail_list_attachments.',
+          description: 'Download an attachment to a local directory. Get the part_id from gmail_list_attachments.',
           properties: {
             message_id:    { type: 'string' },
-            attachment_id: { type: 'string' },
+            part_id:       { type: 'string', description: 'From gmail_list_attachments. Names the file after the attachment.' },
+            attachment_id: { type: 'string', description: 'Raw Gmail attachment id, instead of part_id. ' \
+                                                         'Carries no filename, so pass filename too.' },
             dest_dir:      { type: 'string', description: 'Existing directory to write into. Required — there is no default.' },
             filename:      { type: 'string', description: 'Override the filename. Defaults to the name on the attachment.' }
           },
-          required: %w[message_id attachment_id dest_dir]
-        ) do |message_id:, attachment_id:, dest_dir:, filename: nil|
+          required: %w[message_id dest_dir]
+        ) do |message_id:, dest_dir:, part_id: nil, attachment_id: nil, filename: nil|
           Tools.download_attachment_to(
-            message_id: message_id, attachment_id: attachment_id,
+            message_id: message_id, part_id: part_id, attachment_id: attachment_id,
             dest_dir: dest_dir, filename: filename
           )
         end
@@ -323,33 +325,44 @@ module GMCP
           ToolHelpers.text_response("Batch failed: #{e.class}: #{e.message}")
         end
 
-        def download_attachment_to(message_id:, attachment_id:, dest_dir:, filename: nil)
+        # part_id is the normal route: one listing yields both the filename and
+        # a current attachmentId. A bare attachment_id cannot be named from a
+        # listing, because Gmail reissues the id on every fetch.
+        def download_attachment_to(message_id:, dest_dir:, part_id: nil, attachment_id: nil, filename: nil)
           dir = ::File.expand_path(dest_dir)
-          return ToolHelpers.text_response("Not a directory: #{dir}") unless ::File.directory?(dir)
+          return ToolHelpers.error_response("Not a directory: #{dir}") unless ::File.directory?(dir)
+          if blank?(part_id) && blank?(attachment_id)
+            return ToolHelpers.error_response('Pass part_id (from gmail_list_attachments) or attachment_id.')
+          end
 
-          name = ::File.basename((filename || default_attachment_name(message_id, attachment_id)).to_s)
-          return ToolHelpers.text_response('Refusing to write: unusable filename.') if name.empty? || name == '.' || name == '..'
+          if blank?(part_id)
+            fallback = "#{message_id}-#{attachment_id[0, 12]}.bin"
+          else
+            found         = Message.attachment(message_id, part_id: part_id)
+            attachment_id = found[:attachment_id]
+            fallback      = found[:filename]
+          end
+
+          name = ::File.basename((blank?(filename) ? fallback : filename).to_s)
+          return ToolHelpers.error_response('Refusing to write: unusable filename.') if name.empty? || name == '.' || name == '..'
 
           path = ::File.expand_path(::File.join(dir, name))
           # basename should make this unreachable; belt and braces against a
           # filename that escapes the destination.
           unless path.start_with?(dir + ::File::SEPARATOR)
-            return ToolHelpers.text_response('Refusing to write outside the destination directory.')
+            return ToolHelpers.error_response('Refusing to write outside the destination directory.')
           end
-          return ToolHelpers.text_response("Refusing to overwrite existing file: #{path}") if ::File.exist?(path)
+          return ToolHelpers.error_response("Refusing to overwrite existing file: #{path}") if ::File.exist?(path)
 
           bytes = Message.download_attachment(message_id: message_id, attachment_id: attachment_id)
           ::File.binwrite(path, bytes)
           ToolHelpers.text_response("Wrote #{bytes.bytesize} bytes to #{path}")
-        rescue StandardError => e
-          ToolHelpers.text_response("Download failed: #{e.class}: #{e.message}")
         end
 
         private
 
-        def default_attachment_name(message_id, attachment_id)
-          match = Message.attachments(message_id).find { |a| a[:attachment_id] == attachment_id }
-          match ? match[:filename] : "#{message_id}-#{attachment_id[0, 12]}.bin"
+        def blank?(value)
+          value.nil? || value.to_s.strip.empty?
         end
       end
     end

@@ -182,6 +182,53 @@ describe GMCP::Gmail::Message do
       stub_response({})
       expect(described_class.attachments('m1')).to eq([])
     end
+
+    it 'trims the response to the part tree with a fields mask' do
+      stub_response(payload: {})
+      described_class.attachments('m1')
+      expect(test_api).to have_received(:request).with(hash_including(fields: described_class::ATTACHMENT_FIELDS))
+    end
+  end
+
+  describe 'ATTACHMENT_FIELDS' do
+    it 'reaches nested parts without selecting body data' do
+      mask = described_class::ATTACHMENT_FIELDS
+      expect(mask).to start_with('payload(partId,filename,mimeType,body(size,attachmentId),parts(')
+      expect(mask.scan('parts(').length).to eq(10)
+      expect(mask).not_to include('data')
+      expect(mask.count('(')).to eq(mask.count(')'))
+    end
+  end
+
+  describe '.collect_attachment_parts' do
+    def collect(payload)
+      described_class.send(:collect_attachment_parts, payload)
+    end
+
+    it 'reports the stable partId alongside the per-fetch attachmentId' do
+      found = collect(parts: [{ partId: '1', filename: 'a.pdf', mimeType: 'application/pdf',
+                                body: { size: 9, attachmentId: 'X' } }])
+      expect(found).to eq([{ part_id: '1', filename: 'a.pdf', mime_type: 'application/pdf',
+                             size: 9, attachment_id: 'X' }])
+    end
+
+    it 'reads string-keyed parts too' do
+      found = collect('parts' => [{ 'partId' => '0.1', 'filename' => 'b.csv',
+                                    'body' => { 'attachmentId' => 'Y' } }])
+      expect(found.map { |a| a[:part_id] }).to eq(['0.1'])
+    end
+
+    it 'keeps document order across nesting levels' do
+      found = collect(parts: [
+        { partId: '0', parts: [{ partId: '0.0', filename: 'first', body: { attachmentId: 'A' } }] },
+        { partId: '1', filename: 'second', body: { attachmentId: 'B' } }
+      ])
+      expect(found.map { |a| a[:filename] }).to eq(%w[first second])
+    end
+
+    it 'skips a part with a filename but no attachmentId' do
+      expect(collect(parts: [{ partId: '1', filename: 'tiny.txt', body: { size: 3, data: 'eHl6' } }])).to eq([])
+    end
   end
 
   describe '.download_attachment' do

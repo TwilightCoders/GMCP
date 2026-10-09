@@ -65,12 +65,40 @@ describe GMCP::Gmail::Tools do
       expect(File.binread(File.join(@dir, 'x.png')).b).to eq(raw)
     end
 
-    it 'falls back to the attachment’s own filename' do
-      allow(GMCP::Gmail::Message).to receive(:attachments)
-        .and_return([{ attachment_id: 'A1', filename: 'from-header.csv' }])
+    # Gmail reissues attachmentId on every fetch, so the listing and the
+    # download are tied together by partId instead.
+    it 'names the file after the attachment found by part_id, and downloads by its current id' do
+      google.get('/gmail/v1/users/me/messages/m1') do
+        json(payload: { parts: [
+          { partId: '0', mimeType: 'text/plain', body: { size: 3 } },
+          { partId: '1', filename: 'statement.pdf', mimeType: 'application/pdf',
+            body: { size: 5, attachmentId: 'FRESH-ID' } }
+        ] })
+      end
+      google.get('/gmail/v1/users/me/messages/m1/attachments/FRESH-ID') { json(data: Base64.urlsafe_encode64('bytes')) }
+
+      r = with_google { download(attachment_id: nil, part_id: '1') }
+      expect(r.error?).to be(false)
+      expect(File.binread(File.join(@dir, 'statement.pdf'))).to eq('bytes')
+      google.verify_stubbed_calls
+    end
+
+    it 'refuses a part_id the message does not have' do
+      allow(GMCP::Gmail::Message).to receive(:attachments).and_return([{ part_id: '1', filename: 'a.pdf' }])
+      expect { download(attachment_id: nil, part_id: '9') }.to raise_error(ArgumentError, /no attachment with part_id 9/)
+    end
+
+    it 'falls back to a generic name for a bare attachment_id, without refetching the message' do
+      expect(GMCP::Gmail::Message).not_to receive(:attachments)
       allow(GMCP::Gmail::Message).to receive(:download_attachment).and_return('x')
-      download
-      expect(File.exist?(File.join(@dir, 'from-header.csv'))).to be(true)
+      download(attachment_id: 'ANGjdJ8abcdefghijk')
+      expect(File.exist?(File.join(@dir, 'm1-ANGjdJ8abcde.bin'))).to be(true)
+    end
+
+    it 'needs one of part_id or attachment_id' do
+      r = download(attachment_id: nil)
+      expect(r.error?).to be(true)
+      expect(text_of(r)).to match(/part_id/)
     end
 
     # ── the part that matters ──────────────────────────────────────────────
@@ -109,8 +137,10 @@ describe GMCP::Gmail::Tools do
       expect(File.read(File.join(@dir, 'keep.txt'))).to eq('ORIGINAL')
     end
 
-    it 'refuses a destination that is not a directory' do
-      expect(text_of(download(dest_dir: File.join(@dir, 'nope')))).to match(/Not a directory/)
+    it 'refuses a destination that is not a directory, as an error' do
+      r = download(dest_dir: File.join(@dir, 'nope'))
+      expect(r.error?).to be(true)
+      expect(text_of(r)).to match(/Not a directory/)
     end
 
     it 'does not fetch bytes when the destination is invalid' do
@@ -118,9 +148,11 @@ describe GMCP::Gmail::Tools do
       download(dest_dir: File.join(@dir, 'nope'))
     end
 
-    it 'reports a download failure as readable text' do
-      allow(GMCP::Gmail::Message).to receive(:download_attachment).and_raise('network down')
-      expect(text_of(download(filename: 'a.txt'))).to match(/Download failed: RuntimeError: network down/)
+    # ToolHelpers.guarded turns it into an isError response.
+    it 'lets a download failure propagate, writing nothing' do
+      allow(GMCP::Gmail::Message).to receive(:download_attachment).and_raise(GMCP::ApiError.new(404, 'gone'))
+      expect { download(filename: 'a.txt') }.to raise_error(GMCP::ApiError)
+      expect(File.exist?(File.join(@dir, 'a.txt'))).to be(false)
     end
   end
 end
