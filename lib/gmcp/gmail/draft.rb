@@ -13,8 +13,7 @@ module GMCP
 
       class << self
         def create_draft(to:, subject:, body:)
-          raw = "To: #{to}\r\nSubject: #{subject}\r\nContent-Type: text/plain\r\n\r\n#{body}"
-          post_raw('drafts', { message: { raw: Base64.urlsafe_encode64(raw) } })
+          post_raw('drafts', { message: { raw: Mime.build(to: to, subject: subject, body: body) } })
         end
       end
     end

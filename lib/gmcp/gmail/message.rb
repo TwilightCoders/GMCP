@@ -85,22 +85,38 @@ module GMCP
         })
       end
 
+      # Headers a reply needs from the original, and nothing else.
+      REPLY_HEADERS = %w[From Reply-To Subject Message-ID References].freeze
+
+      # Threading needs both halves: Gmail files the reply by threadId, while
+      # every other client on the thread goes by In-Reply-To and References,
+      # which name the original's RFC Message-ID — not Gmail's own hex id.
       def reply!(body:)
-        headers = payload&.dig('headers') || []
-        subject   = headers.find { |h| h['name'] == 'Subject' }&.fetch('value', '') || ''
-        reply_sub = subject.start_with?('Re:') ? subject : "Re: #{subject}"
-        from      = headers.find { |h| h['name'] == 'From' }&.fetch('value', '') || ''
-        raw = "To: #{from}\r\nSubject: #{reply_sub}\r\n" \
-              "In-Reply-To: #{id}\r\nReferences: #{id}\r\n" \
-              "Content-Type: text/plain\r\n\r\n#{body}"
+        to = unfold(header('Reply-To') || header('From'))
+        raise ArgumentError, "message #{id} has no From or Reply-To to reply to" if to.empty?
+
+        subject = unfold(header('Subject'))
+        subject = "Re: #{subject}" unless subject.match?(/\Are:/i)
+
+        threading = {}
+        if (message_id = header('Message-ID'))
+          threading['In-Reply-To'] = unfold(message_id)
+          threading['References']  = unfold("#{header('References')} #{message_id}")
+        end
+
         self.class.post_raw('messages/send', {
-          raw:      Base64.urlsafe_encode64(raw),
+          raw:      Mime.build(to: to, subject: subject, body: body, headers: threading),
           threadId: threadId
         })
       end
 
-
       private
+
+      # A long header from the original may still carry its folding. Mime
+      # refuses line breaks, so collapse them here rather than fail the reply.
+      def unfold(value)
+        value.to_s.gsub(/\s+/, ' ').strip
+      end
 
       def payload_fetch(key)
         hash = payload
@@ -193,7 +209,18 @@ module GMCP
         text.empty? ? nil : text
       end
 
+      # Partial response for a metadata fetch: the ids and the requested
+      # headers, without the rest of the payload.
+      METADATA_FIELDS = 'id,threadId,labelIds,payload/headers'
+
       class << self
+        # Just the named headers, for callers that never read the body —
+        # a few hundred bytes instead of the whole MIME tree.
+        def metadata(message_id, headers:)
+          params = { format: 'metadata', metadataHeaders: headers, fields: METADATA_FIELDS }
+          get_raw("messages/#{message_id}", params) { |parsed, _response| new(parsed[:data] || {}) }
+        end
+
         def search(query, max_results: 20)
           get_collection('messages', q: query, maxResults: max_results)
         end
@@ -286,8 +313,7 @@ module GMCP
         end
 
         def send_message(to:, subject:, body:)
-          raw = "To: #{to}\r\nSubject: #{subject}\r\nContent-Type: text/plain\r\n\r\n#{body}"
-          post_raw('messages/send', { raw: Base64.urlsafe_encode64(raw) })
+          post_raw('messages/send', { raw: Mime.build(to: to, subject: subject, body: body) })
         end
 
         private

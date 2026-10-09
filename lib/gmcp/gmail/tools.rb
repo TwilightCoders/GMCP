@@ -147,7 +147,7 @@ module GMCP
           },
           required: ['message_id', 'body']
         ) do |message_id:, body:|
-          Message.find(message_id).reply!(body: body)
+          Message.metadata(message_id, headers: Message::REPLY_HEADERS).reply!(body: body)
           ToolHelpers.text_response('Reply sent.')
         end
       end

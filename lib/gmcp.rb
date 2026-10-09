@@ -24,6 +24,7 @@ module GMCP
   module Gmail
     autoload :Message, 'gmcp/gmail/message'
     autoload :Label,   'gmcp/gmail/label'
+    autoload :Mime,    'gmcp/gmail/mime'
     autoload :Draft,   'gmcp/gmail/draft'
     autoload :Unsubscribe, 'gmcp/gmail/unsubscribe'
     autoload :Tools,   'gmcp/gmail/tools'

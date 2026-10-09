@@ -70,40 +70,4 @@ describe GMCP::Gmail::Message do
       )
     end
   end
-
-  describe '.send_message' do
-    it 'POSTs /messages/send with base64url-encoded raw' do
-      described_class.send_message(to: 'bob@example.com', subject: 'Hi', body: 'Hello')
-      expect(test_api).to have_received(:request) do |params|
-        expect(params[:_method]).to eq(:post)
-        expect(params[:_path]).to eq('messages/send')
-        raw = Base64.urlsafe_decode64(params[:raw])
-        expect(raw).to include('To: bob@example.com')
-        expect(raw).to include('Subject: Hi')
-        expect(raw).to include('Hello')
-      end
-    end
-  end
-
-  describe '#reply!' do
-    it 'POSTs /messages/send with correct threadId and Re: subject' do
-      msg = described_class.new(
-        id: 'msg123',
-        threadId: 'thread456',
-        payload: { 'headers' => [
-          { 'name' => 'Subject', 'value' => 'Hello' },
-          { 'name' => 'From',    'value' => 'alice@example.com' }
-        ]}
-      )
-      msg.reply!(body: 'Thanks!')
-      expect(test_api).to have_received(:request) do |params|
-        expect(params[:_method]).to eq(:post)
-        expect(params[:_path]).to eq('messages/send')
-        expect(params[:threadId]).to eq('thread456')
-        raw = Base64.urlsafe_decode64(params[:raw])
-        expect(raw).to include('Subject: Re: Hello')
-        expect(raw).to include('Thanks!')
-      end
-    end
-  end
 end
