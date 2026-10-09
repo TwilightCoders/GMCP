@@ -17,6 +17,7 @@ module GMCP
           name: 'gmail_search',
           capability: 'gmail.read',
           description: 'Search Gmail messages using a query string (same syntax as Gmail search box). ' \
+                       'Returns one line per message: id, date, from, subject. ' \
                        'Returns a page_token when more results exist; pass it back to get the next page.',
           properties: {
             query:       { type: 'string', description: 'Gmail search query, e.g. "from:alice subject:report"' },
@@ -25,14 +26,7 @@ module GMCP
           },
           required: ['query']
         ) do |query:, max_results: 20, page_token: nil|
-          page = Message.search_page(query, max_results: max_results, page_token: page_token)
-          lines = page[:messages].map { |m| m.id.to_s }
-          body  = lines.empty? ? 'No messages found.' : lines.join("\n")
-          if page[:next_page_token]
-            body += "\n\nMore results available. next page_token: #{page[:next_page_token]}"
-          end
-          body += "\n(Gmail estimates ~#{page[:estimate]} total matches; the estimate is approximate.)" if page[:estimate]
-          ToolHelpers.text_response(body)
+          Tools.search(query: query, max_results: max_results, page_token: page_token)
         end
 
         ToolHelpers.account_tool(
@@ -298,6 +292,23 @@ module GMCP
       end
 
       class << self
+        # One line per message — id, date, sender, subject — so a caller can
+        # triage a page without a follow-up fetch per result.
+        def search(query:, max_results: 20, page_token: nil)
+          page     = Message.search_page(query, max_results: max_results, page_token: page_token)
+          messages = Message.metadata_for(page[:messages].map(&:id), headers: Message::SEARCH_HEADERS)
+
+          lines = messages.map do |m|
+            [m.id, m.header('Date'), m.header('From'), m.header('Subject')].compact.join('  ')
+          end
+          body = lines.empty? ? 'No messages found.' : lines.join("\n")
+          if page[:next_page_token]
+            body += "\n\nMore results available. next page_token: #{page[:next_page_token]}"
+          end
+          body += "\n(Gmail estimates ~#{page[:estimate]} total matches; the estimate is approximate.)" if page[:estimate]
+          ToolHelpers.text_response(body)
+        end
+
         # Shared shape for the batch tools: reject an empty set, surface
         # Gmail's own limit rather than truncating, and report failures as
         # readable text instead of an MCP internal error.

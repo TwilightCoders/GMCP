@@ -213,12 +213,52 @@ module GMCP
       # headers, without the rest of the payload.
       METADATA_FIELDS = 'id,threadId,labelIds,payload/headers'
 
+      # What a search result line shows.
+      SEARCH_HEADERS = %w[From Subject Date].freeze
+
+      # Concurrent fetches per page. Enough to hide latency on a 20–100
+      # message page without leaning on Gmail's per-user rate limit.
+      FETCH_THREADS = 8
+
       class << self
         # Just the named headers, for callers that never read the body —
         # a few hundred bytes instead of the whole MIME tree.
         def metadata(message_id, headers:)
           params = { format: 'metadata', metadataHeaders: headers, fields: METADATA_FIELDS }
           get_raw("messages/#{message_id}", params) { |parsed, _response| new(parsed[:data] || {}) }
+        end
+
+        # .metadata for each id, in the order given, FETCH_THREADS at a time.
+        # Gmail's list endpoint returns bare ids, so a page of results is
+        # unreadable until each one is fetched; serially that is one round
+        # trip per message.
+        #
+        # A message deleted between the list and the fetch comes back as a
+        # bare id rather than failing the whole page. Any other failure is
+        # raised, after the remaining fetches are abandoned.
+        def metadata_for(ids, headers:)
+          apis    = ApiBinding.current # fiber-local, so each worker rebinds it
+          results = Array.new(ids.length)
+          queue   = Queue.new
+          ids.each_with_index { |id, index| queue << [id, index] }
+          queue.close
+
+          workers = Array.new([FETCH_THREADS, ids.length].min) do
+            ::Thread.new do
+              ::Thread.current.report_on_exception = false # re-raised by #value below
+              ApiBinding.with(apis) do
+                while (job = queue.pop)
+                  id, index = job
+                  results[index] = metadata_or_gone(id, headers)
+                end
+              end
+            rescue StandardError
+              queue.clear
+              raise
+            end
+          end
+          workers.each(&:value)
+          results
         end
 
         def search(query, max_results: 20)
@@ -317,6 +357,14 @@ module GMCP
         end
 
         private
+
+        def metadata_or_gone(id, headers)
+          metadata(id, headers: headers)
+        rescue ApiError => e
+          raise unless e.status == 404
+
+          new(id: id)
+        end
 
         def collect_attachment_parts(part, acc = [])
           body = part[:body] || part['body'] || {}
