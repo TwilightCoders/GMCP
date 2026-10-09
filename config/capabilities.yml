@@ -5,8 +5,9 @@
 # here is claimed by exactly the tools listed and vice versa — so the manifest
 # cannot drift from the code without the suite going red. Capabilities should
 # be declared by the connector, never inferred; a declaration that can drift is
-# worse than an inference, because it reads as authoritative while being wrong. The drift spec is what
-# makes this file a fact about the connector rather than a claim by it.
+# worse than an inference, because it reads as authoritative while being
+# wrong. The drift spec is what makes this file a fact about the connector
+# rather than a claim by it.
 #
 # A static file (rather than a tool) also lets a registration UI read what a
 # connector COULD do without spawning it first.
