@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GMCP Privacy Policy — Twilight Coders</title>
+  <meta name="description" content="How GMCP, an open-source local MCP server for Google services, accesses and handles Google user data.">
+  <style>
+    :root { --bg: #fafafa; --fg: #1b1b1f; --muted: #5c5c66; --link: #3b5bdb; --rule: #e2e2e8; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #111114; --fg: #e8e8ee; --muted: #9a9aa6; --link: #91a7ff; --rule: #2a2a32; }
+    }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, -apple-system, sans-serif; }
+    main { max-width: 42rem; margin: 0 auto; padding: 3rem 1rem 4rem; }
+    h1 { font-size: 2rem; margin: 0 0 .25rem; }
+    h2 { font-size: 1.15rem; margin-top: 2rem; }
+    .lede { color: var(--muted); margin-top: 0; }
+    a { color: var(--link); }
+    code { font-size: .9em; overflow-wrap: anywhere; }
+    footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--muted); font-size: .9rem; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>GMCP Privacy Policy</h1>
+  <p class="lede">Last updated: October 9, 2026</p>
+
+  <h2>Overview</h2>
+  <p>GMCP is an open-source Model Context Protocol (MCP) server published by Twilight Coders LLC. It runs locally on your own computer and connects an AI assistant you choose to your own Google account. This policy explains what Google user data GMCP accesses and how that data is handled.</p>
+
+  <h2>Data accessed</h2>
+  <p>With your authorization, GMCP requests these Google OAuth scopes:</p>
+  <ul>
+    <li><code>gmail.modify</code>: search and read your email and attachments, and manage labels.</li>
+    <li><code>calendar.events</code>: read events on your calendars.</li>
+    <li><code>drive.readonly</code>: search, list and read your Drive files.</li>
+    <li><code>userinfo.email</code>: identify which Google account an authorization belongs to.</li>
+  </ul>
+
+  <h2>How data is used</h2>
+  <p>GMCP retrieves Google data only when the assistant you run it with makes a request on your behalf, and it returns that data only to that assistant on your computer. It is not used for advertising, profiling or any other purpose.</p>
+
+  <h2>Storage</h2>
+  <ul>
+    <li>OAuth tokens are stored in files on your own computer and never leave it.</li>
+    <li><strong>Twilight Coders operates no servers for GMCP.</strong> GMCP sends no data to Twilight Coders or to any party other than Google's APIs and your chosen assistant.</li>
+    <li>GMCP does not keep a copy of your email, calendar or Drive content.</li>
+  </ul>
+  <p>The AI assistant you connect GMCP to is a separate product governed by its own privacy policy, which determines how it handles the data GMCP passes to it.</p>
+
+  <h2>Sharing</h2>
+  <p>Twilight Coders does not collect, sell, transfer or share Google user data, because it never receives any.</p>
+
+  <h2>Google API Services User Data Policy</h2>
+  <p>GMCP's use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+
+  <h2>Revoking access</h2>
+  <p>You can revoke GMCP's access at any time from your <a href="https://myaccount.google.com/permissions">Google Account permissions page</a>. Deleting GMCP's token files from your computer also removes its access.</p>
+
+  <h2>Changes</h2>
+  <p>This policy may be updated from time to time. Changes are reflected in the "Last updated" date above.</p>
+
+  <h2>Contact</h2>
+  <p>For privacy questions, open an issue at <a href="https://github.com/TwilightCoders/GMCP/issues">github.com/TwilightCoders/GMCP</a> or email <a href="mailto:support@twilightcoders.net">support@twilightcoders.net</a>.</p>
+
+  <footer>
+    <a href="/">Twilight Coders</a> · <a href="/gmcp/">GMCP</a>
+  </footer>
+</main>
+</body>
+</html>

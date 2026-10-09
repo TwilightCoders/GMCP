@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GMCP — Twilight Coders</title>
+  <meta name="description" content="GMCP is an open-source, local Model Context Protocol server that gives AI assistants access to your own Gmail, Google Calendar and Google Drive.">
+  <style>
+    :root { --bg: #fafafa; --fg: #1b1b1f; --muted: #5c5c66; --link: #3b5bdb; --rule: #e2e2e8; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #111114; --fg: #e8e8ee; --muted: #9a9aa6; --link: #91a7ff; --rule: #2a2a32; }
+    }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, -apple-system, sans-serif; }
+    main { max-width: 42rem; margin: 0 auto; padding: 3rem 1rem 4rem; }
+    h1 { font-size: 2rem; margin: 0 0 .25rem; }
+    h2 { font-size: 1.15rem; margin-top: 2rem; }
+    .lede { color: var(--muted); margin-top: 0; }
+    a { color: var(--link); }
+    code { font-size: .9em; }
+    footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--rule); color: var(--muted); font-size: .9rem; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>GMCP</h1>
+  <p class="lede">An open-source, local Model Context Protocol (MCP) server for Gmail, Google Calendar and Google Drive.</p>
+
+  <p>GMCP lets an AI assistant running on your own computer search and read your email, check your calendar and read your Drive files, using your own Google account. It runs entirely on your machine as a command-line program. There is no GMCP service, server or account.</p>
+
+  <h2>What it does</h2>
+  <ul>
+    <li><strong>Gmail:</strong> search messages, read messages and attachments, manage labels.</li>
+    <li><strong>Google Calendar:</strong> list calendars and read events.</li>
+    <li><strong>Google Drive:</strong> search, list and read files.</li>
+    <li>Several Google accounts can be connected at once, each with its own authorization.</li>
+  </ul>
+
+  <h2>How your data is handled</h2>
+  <p>GMCP talks directly from your computer to Google's APIs. Authorization tokens are stored only on your computer, and the data GMCP retrieves goes only to the assistant you run it with. Twilight Coders never receives, stores or sees any of it. See the <a href="/gmcp/privacy/">privacy policy</a> for details.</p>
+
+  <h2>Getting it</h2>
+  <p>GMCP is distributed as a Ruby gem. Source code, setup instructions and issue tracking are on <a href="https://github.com/TwilightCoders/GMCP">GitHub</a>.</p>
+
+  <footer>
+    <a href="/">Twilight Coders</a> · <a href="/gmcp/privacy/">Privacy policy</a> · <a href="mailto:support@twilightcoders.net">support@twilightcoders.net</a>
+  </footer>
+</main>
+</body>
+</html>
