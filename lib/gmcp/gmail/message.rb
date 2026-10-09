@@ -74,10 +74,6 @@ module GMCP
         self.class.post_raw("messages/#{id}/trash", {})
       end
 
-      def untrash!
-        self.class.post_raw("messages/#{id}/untrash", {})
-      end
-
       def archive!
         modify!(removeLabelIds: ['INBOX'])
       end
@@ -263,10 +259,6 @@ module GMCP
         # single-message trash.
         def batch_trash(ids:)
           batch_modify(ids: ids, add_label_ids: ['TRASH'])
-        end
-
-        def batch_untrash(ids:)
-          batch_modify(ids: ids, remove_label_ids: ['TRASH'])
         end
 
         # Archiving in Gmail is removing INBOX, nothing more.

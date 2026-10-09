@@ -48,15 +48,6 @@ describe GMCP::Gmail::Message do
     end
   end
 
-  describe '#untrash!' do
-    it 'POSTs /messages/:id/untrash' do
-      described_class.new(id: 'msg123').untrash!
-      expect(test_api).to have_received(:request).with(
-        hash_including(_method: :post, _path: 'messages/msg123/untrash')
-      )
-    end
-  end
-
   describe '#archive!' do
     it 'POSTs /messages/:id/modify with removeLabelIds: [INBOX]' do
       described_class.new(id: 'msg123').archive!

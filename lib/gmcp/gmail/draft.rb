@@ -11,10 +11,6 @@ module GMCP
 
       attributes :id, :message
 
-      def send!
-        self.class.post_raw("drafts/#{id}/send", {})
-      end
-
       class << self
         def create_draft(to:, subject:, body:)
           raw = "To: #{to}\r\nSubject: #{subject}\r\nContent-Type: text/plain\r\n\r\n#{body}"

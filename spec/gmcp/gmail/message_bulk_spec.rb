@@ -135,11 +135,6 @@ describe GMCP::Gmail::Message do
       )
     end
 
-    it 'untrashes by removing it' do
-      described_class.batch_untrash(ids: %w[a])
-      expect(test_api).to have_received(:request).with(hash_including(removeLabelIds: ['TRASH'], addLabelIds: []))
-    end
-
     it 'archives by removing INBOX and nothing else' do
       described_class.batch_archive(ids: %w[a b])
       expect(test_api).to have_received(:request).with(

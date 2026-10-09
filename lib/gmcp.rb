@@ -23,7 +23,6 @@ module GMCP
 
   module Gmail
     autoload :Message, 'gmcp/gmail/message'
-    autoload :Thread,  'gmcp/gmail/thread'
     autoload :Label,   'gmcp/gmail/label'
     autoload :Draft,   'gmcp/gmail/draft'
     autoload :Unsubscribe, 'gmcp/gmail/unsubscribe'

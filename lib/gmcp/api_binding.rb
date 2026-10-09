@@ -18,7 +18,7 @@ module GMCP
 
     # Deferred so autoload is not forced at require time.
     MODELS = {
-      gmail:    -> { [Gmail::Message, Gmail::Thread, Gmail::Label, Gmail::Draft] },
+      gmail:    -> { [Gmail::Message, Gmail::Label, Gmail::Draft] },
       calendar: -> { [Calendar::Event, Calendar::Calendar] },
       drive:    -> { [Drive::File] }
     }.freeze
