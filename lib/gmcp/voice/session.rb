@@ -31,6 +31,8 @@ module GMCP
       API_KEY  = ENV.fetch('GMCP_VOICE_API_KEY', 'AIzaSyDTYc1N4xiODyrQYK0Kl6g_y279LjYkrBg')
       ORIGIN   = 'https://voice.google.com'
 
+      AUTH_FAILURE_CODES = %w[401 403].freeze
+
       # Cookies the browser sends to google.com on every request.
       # SAPISID / __Secure-1PAPISID / __Secure-3PAPISID drive the auth hashes;
       # SID / HSID / SSID / NID identify the session.
@@ -78,7 +80,13 @@ module GMCP
         parsed = JSON.parse(resp.body) rescue nil
 
         unless resp.is_a?(Net::HTTPSuccess)
-          msg = parsed&.dig('error', 'message') || resp.body.to_s[0, 300]
+          msg = parsed.is_a?(Hash) && parsed.dig('error', 'message') || resp.body.to_s[0, 300]
+          # Google rotates __Secure-*PSIDTS and friends under a long-lived
+          # process, so a rejection here usually means our snapshot of the
+          # cookies is stale rather than that the call was malformed. AuthError
+          # tells the caller to re-read them.
+          raise AuthError, "#{path}: HTTP #{resp.code} — #{msg}" if AUTH_FAILURE_CODES.include?(resp.code.to_s)
+
           raise OperationError, "#{path}: HTTP #{resp.code} — #{msg}"
         end
 

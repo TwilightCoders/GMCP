@@ -135,8 +135,8 @@ module GMCP
           @session ||= Session.new
         end
 
-        # Test/reauth seam: drop the memoized session so the next call re-reads
-        # cookies from disk (e.g. after the user signs in again in Safari).
+        # Drop the memoized session so the next call re-reads cookies from disk.
+        # guarding calls this on every auth failure.
         def reset_session!
           @session = nil
         end
@@ -148,17 +148,20 @@ module GMCP
           resp.dig(0, 0) if resp.is_a?(Array)
         end
 
-        # Uniform error surface for every voice tool. Cookie problems and API
-        # problems both come back as readable text rather than an MCP -32603.
+        # Uniform error surface for every voice tool, with Voice-specific advice
+        # that the generic ToolHelpers.guarded cannot give. An auth failure also
+        # drops the memoized session, so the retry this message asks for picks
+        # up whatever cookies Safari holds now instead of the rejected ones.
         def guarding
           yield
         rescue Session::AuthError => e
-          ToolHelpers.text_response(
+          reset_session!
+          ToolHelpers.error_response(
             "Voice auth failed: #{e.message}\n" \
             'Sign in to voice.google.com in Safari, then retry.'
           )
         rescue Session::OperationError => e
-          ToolHelpers.text_response("Voice API error: #{e.message}")
+          ToolHelpers.error_response("Voice API error: #{e.message}")
         end
       end
     end
