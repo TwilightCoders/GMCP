@@ -34,31 +34,73 @@ describe GMCP::Voice::Session do
   end
 end
 
+describe GMCP::Voice::Session, '.for' do
+  it 'reports a missing or failed profile read as an AuthError' do
+    allow(GMCP::Voice::Chrome).to receive(:cookies).and_raise(GMCP::Voice::Chrome::Error, 'No Voice sign-in')
+
+    expect { described_class.for('me@example.com') }.to raise_error(described_class::AuthError, /No Voice sign-in/)
+  end
+
+  it 'keeps only the session cookies' do
+    allow(GMCP::Voice::Chrome).to receive(:cookies).and_return('SAPISID' => 's', 'NID' => 'n', 'OTHER' => 'x')
+
+    expect(described_class.for('me@example.com').send(:cookie_header)).to eq('SAPISID=s; NID=n')
+  end
+end
+
 describe GMCP::Voice::Tools do
+  before { allow(GMCP::Server).to receive(:configured_account) { |account| account || 'me@example.com' } }
   after { described_class.reset_session! }
 
-  it 'drops the memoized session on an auth failure so the next call re-reads cookies' do
+  def guard(account = nil)
+    described_class.guarding(account) { |acct| described_class.session(acct).call('account/get') }
+  end
+
+  it 'drops the memoized session on an auth failure so the next call fetches a fresh one' do
     stale = instance_double(GMCP::Voice::Session)
     fresh = instance_double(GMCP::Voice::Session)
     allow(stale).to receive(:call).and_raise(GMCP::Voice::Session::AuthError, 'HTTP 401')
-    allow(GMCP::Voice::Session).to receive(:new).and_return(stale, fresh)
+    allow(GMCP::Voice::Session).to receive(:for).and_return(stale, fresh)
 
-    response = described_class.guarding { described_class.session.call('account/get') }
+    response = guard
 
     expect(response.error?).to be(true)
-    expect(response.content.first[:text]).to match(/Voice auth failed: HTTP 401/)
-    expect(described_class.session).to be(fresh)
+    expect(response.content.first[:text]).to match(/Voice auth failed for me@example.com: HTTP 401/)
+    expect(described_class.session('me@example.com')).to be(fresh)
   end
 
   it 'keeps the session across ordinary API errors' do
     session = instance_double(GMCP::Voice::Session)
     allow(session).to receive(:call).and_raise(GMCP::Voice::Session::OperationError, 'HTTP 400')
-    allow(GMCP::Voice::Session).to receive(:new).and_return(session)
+    allow(GMCP::Voice::Session).to receive(:for).and_return(session)
 
-    response = described_class.guarding { described_class.session.call('account/get') }
+    expect(guard.error?).to be(true)
+    expect(described_class.session('me@example.com')).to be(session)
+    expect(GMCP::Voice::Session).to have_received(:for).once
+  end
 
-    expect(response.error?).to be(true)
-    expect(described_class.session).to be(session)
-    expect(GMCP::Voice::Session).to have_received(:new).once
+  it 'keeps a separate session per account' do
+    a = instance_double(GMCP::Voice::Session)
+    b = instance_double(GMCP::Voice::Session)
+    allow(GMCP::Voice::Session).to receive(:for).with('a@example.com').and_return(a)
+    allow(GMCP::Voice::Session).to receive(:for).with('b@example.com').and_return(b)
+
+    expect([described_class.session('a@example.com'), described_class.session('b@example.com')]).to eq([a, b])
+  end
+end
+
+describe GMCP::Server, '.configured_account' do
+  before do
+    registry = GMCP::AccountRegistry.allocate
+    registry.instance_variable_set(:@accounts, %w[a@example.com b@example.com])
+    allow(described_class).to receive(:registry).and_return(registry)
+  end
+
+  it 'defaults to the first configured account' do
+    expect(described_class.configured_account(nil)).to eq('a@example.com')
+  end
+
+  it 'refuses an account outside GMCP_ACCOUNTS' do
+    expect { described_class.configured_account('x@example.com') }.to raise_error(ArgumentError, /Unknown account/)
   end
 end

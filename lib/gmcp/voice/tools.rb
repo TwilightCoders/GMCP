@@ -7,15 +7,10 @@ module GMCP
   module Voice
     # MCP tools for Google Voice.
     #
-    # Unlike the Gmail/Calendar/Drive tools, these do NOT take an `account:`
-    # parameter and do NOT go through Server.with_account. Voice has no usable
-    # OAuth path — the token→cookie exchange (accounts.google.com/OAuthLogin)
-    # is reserved for Chromium — so Session authenticates with the browser
-    # cookies Safari already holds. That means the identity is fixed: whichever
-    # Google account is signed in to Safari, which is not necessarily the
-    # account GMCP_ACCOUNTS names.
-    #
-    # `voice_account` exists to make that visible rather than silent.
+    # Each takes the same `account:` as the other services and is limited to
+    # GMCP_ACCOUNTS, but does not go through Server.with_account: Voice has no
+    # OAuth scope, so its session comes from the Chrome profile signed in to
+    # the account (see Voice::Chrome).
     module Tools
       def self.register(server)
         register_read(server)
@@ -27,16 +22,14 @@ module GMCP
           server,
           name: 'voice_account',
           capability: 'voice.read',
-          description: 'Show which Google Voice account the current Safari session resolves to. ' \
-                       'Voice auth comes from Safari cookies, not from GMCP_ACCOUNTS, so use this ' \
-                       'to confirm whose Voice data the other voice_* tools will operate on.',
-          properties: {}
-        ) do
-          Tools.guarding do
-            number = Tools.account_number
+          description: 'Show the Google Voice number of an account.',
+          properties: { **ToolHelpers::ACCOUNT_PARAM }
+        ) do |account: nil|
+          Tools.guarding(account) do |acct|
+            number = Tools.account_number(acct)
             ToolHelpers.text_response(
-              number ? "Voice number: #{number} (from Safari session cookies)"
-                     : 'Authenticated, but no Voice number returned for this account.'
+              number ? "Voice number for #{acct}: #{number}"
+                     : "#{acct} has no Google Voice number."
             )
           end
         end
@@ -49,11 +42,12 @@ module GMCP
                        "Folders: #{FOLDERS.keys.join(', ')}. Pass the returned next_cursor to get the next page.",
           properties: {
             folder: { type: 'string', description: 'Folder name (default: all)' },
-            cursor: { type: 'string', description: 'next_cursor from a previous voice_list call' }
+            cursor: { type: 'string', description: 'next_cursor from a previous voice_list call' },
+            **ToolHelpers::ACCOUNT_PARAM
           }
-        ) do |folder: 'all', cursor: nil|
-          Tools.guarding do
-            page = Folder.fetch(Tools.session, folder, cursor: cursor)
+        ) do |folder: 'all', cursor: nil, account: nil|
+          Tools.guarding(account) do |acct|
+            page = Folder.fetch(Tools.session(acct), folder, cursor: cursor)
             lines = page.conversations.map { |c| Tools.format(c) }
             next ToolHelpers.text_response("No threads in #{folder}.") if lines.empty?
 
@@ -72,12 +66,13 @@ module GMCP
           properties: {
             query:  { type: 'string', description: 'Text, name, or phone number to look for' },
             folder: { type: 'string', description: "Folder to scan (default: all). One of #{FOLDERS.keys.join(', ')}" },
-            pages:  { type: 'integer', description: "Pages to scan (default: #{Folder::SEARCH_PAGES}, max: #{Folder::MAX_SEARCH_PAGES})" }
+            pages:  { type: 'integer', description: "Pages to scan (default: #{Folder::SEARCH_PAGES}, max: #{Folder::MAX_SEARCH_PAGES})" },
+            **ToolHelpers::ACCOUNT_PARAM
           },
           required: ['query']
-        ) do |query:, folder: 'all', pages: Folder::SEARCH_PAGES|
-          Tools.guarding do
-            matches, scanned = Folder.search(Tools.session, query, folder: folder, pages: pages)
+        ) do |query:, folder: 'all', pages: Folder::SEARCH_PAGES, account: nil|
+          Tools.guarding(account) do |acct|
+            matches, scanned = Folder.search(Tools.session(acct), query, folder: folder, pages: pages)
             ToolHelpers.list_response(matches, empty_message: "No matches in the #{scanned} most recent #{folder} threads.") do |c|
               Tools.format(c)
             end
@@ -92,36 +87,38 @@ module GMCP
           capability: 'voice.modify',
           description: 'Mark a Google Voice thread as read. Takes a thread id from voice_list or voice_search.',
           properties: {
-            thread_id: { type: 'string' }
+            thread_id: { type: 'string' },
+            **ToolHelpers::ACCOUNT_PARAM
           },
           required: ['thread_id']
-        ) do |thread_id:|
-          Tools.guarding do
-            Tools.session.call('thread/updateattributes', Tools.mark_read_body(thread_id))
+        ) do |thread_id:, account: nil|
+          Tools.guarding(account) do |acct|
+            Tools.session(acct).call('thread/updateattributes', Tools.mark_read_body(thread_id))
             ToolHelpers.text_response("Thread #{thread_id} marked read.")
           end
         end
       end
 
       class << self
-        # One session per process. Cookies and derived auth are reused across
-        # calls; there is nothing to key it by, because Safari holds exactly one
-        # Google session for this user.
-        def session
-          @session ||= Session.new
+        # One session per account, reused across calls until Google rejects it.
+        def session(account)
+          lock.synchronize { sessions[account] ||= Session.for(account) }
         end
 
-        # Drop the memoized session so the next call re-reads cookies from disk.
-        # guarding calls this on every auth failure.
-        def reset_session!
-          @session = nil
+        # Drop memoized sessions so the next call fetches fresh cookies.
+        # guarding calls this for an account on every auth failure.
+        def reset_session!(account = nil)
+          lock.synchronize { account ? sessions.delete(account) : sessions.clear }
         end
 
-        # Voice number for the current session, or nil. Shape of account/get is
+        # Voice number for an account, or nil when the account has no Voice
+        # (account/get answers NOT_FOUND). Shape of account/get is
         # [["+1XXXXXXXXXX", ...]].
-        def account_number
-          resp = session.call('account/get', [])
+        def account_number(account)
+          resp = session(account).call('account/get', [])
           resp.dig(0, 0) if resp.is_a?(Array)
+        rescue Session::OperationError => e
+          raise unless e.message.include?('NOT_FOUND')
         end
 
         # thread/updateattributes takes the new attributes, then a second
@@ -147,20 +144,33 @@ module GMCP
           parts.join(' ')
         end
 
-        # Uniform error surface for every voice tool, with Voice-specific advice
-        # that the generic ToolHelpers.guarded cannot give. An auth failure also
-        # drops the memoized session, so the retry this message asks for picks
-        # up whatever cookies Safari holds now instead of the rejected ones.
-        def guarding
-          yield
-        rescue Session::AuthError => e
-          reset_session!
-          ToolHelpers.error_response(
-            "Voice auth failed: #{e.message}\n" \
-            'Sign in to voice.google.com in Safari, then retry.'
-          )
-        rescue Session::OperationError => e
-          ToolHelpers.error_response("Voice API error: #{e.message}")
+        # Resolves the account against GMCP_ACCOUNTS and gives every voice tool
+        # one error surface, with advice the generic ToolHelpers.guarded cannot
+        # give. An auth failure also drops that account's session, so a retry
+        # re-reads the profile instead of reusing rejected cookies.
+        def guarding(account)
+          account = GMCP::Server.configured_account(account)
+          begin
+            yield account
+          rescue Session::AuthError => e
+            reset_session!(account)
+            ToolHelpers.error_response(
+              "Voice auth failed for #{account}: #{e.message}\n" \
+              "If this persists, open Google Voice in that account's Chrome profile to refresh its session."
+            )
+          rescue Session::OperationError => e
+            ToolHelpers.error_response("Voice API error: #{e.message}")
+          end
+        end
+
+        private
+
+        def sessions
+          @sessions ||= {}
+        end
+
+        def lock
+          @lock ||= Mutex.new
         end
       end
     end

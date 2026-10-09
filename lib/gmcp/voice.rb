@@ -29,6 +29,6 @@ module GMCP
     autoload :Conversation,  'gmcp/voice/conversation'
     autoload :Folder,        'gmcp/voice/folder'
     autoload :Tools,         'gmcp/voice/tools'
-    autoload :SafariCookies, 'gmcp/voice/safari_cookies'
+    autoload :Chrome,        'gmcp/voice/chrome'
   end
 end

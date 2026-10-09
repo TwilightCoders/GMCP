@@ -11,13 +11,13 @@ module GMCP
     #
     # The "public" Google Voice API is what the voice.google.com SPA calls
     # internally at https://clients6.google.com/voice/v1/voiceclient/...
-    # Auth is cookie-based (the session cookies Safari already has from
-    # regular browser login) plus a SAPISIDHASH triple Authorization header
-    # and a public API key embedded in the voice.google.com page source.
+    # Auth is cookie-based plus a SAPISIDHASH triple Authorization header and
+    # a public API key embedded in the voice.google.com page source.
     #
     # No OAuth — the Google OAuth2 scope required for the token→cookie
-    # exchange (OAuthLogin) is reserved for Chromium and isn't grantable
-    # to external clients. So we read cookies directly from Safari.
+    # exchange (OAuthLogin) is reserved for Chromium and isn't grantable to
+    # external clients. The cookies come from the Chrome profile signed in to
+    # the account instead; see Voice::Chrome.
     class Session
       class AuthError      < StandardError; end
       class OperationError < StandardError; end
@@ -32,6 +32,7 @@ module GMCP
       ORIGIN   = 'https://voice.google.com'
 
       AUTH_FAILURE_CODES = %w[401 403].freeze
+      USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'
 
       # Cookies the browser sends to google.com on every request.
       # SAPISID / __Secure-1PAPISID / __Secure-3PAPISID drive the auth hashes;
@@ -45,6 +46,13 @@ module GMCP
         NID
       ].freeze
 
+      # A session for one account, from its GMCP Chrome profile.
+      def self.for(account)
+        new(cookies: Chrome.cookies(account))
+      rescue Chrome::Error => e
+        raise AuthError, e.message
+      end
+
       # The Authorization header Google's internal APIs expect is three
       # space-separated <tag> <ts>_<sha1(ts SP cookie SP origin)> chunks.
       HASH_COOKIES = [
@@ -53,17 +61,9 @@ module GMCP
         ['SAPISID3PHASH', '__Secure-3PAPISID']
       ].freeze
 
-      def initialize(cookies: nil, cookie_path: nil)
-        @cookies = cookies || SafariCookies.read(
-          domain: '.google.com',
-          names: SESSION_COOKIE_NAMES,
-          path: cookie_path
-        )
-        raise AuthError, 'Missing SAPISID cookie — log into Google in Safari first' unless @cookies['SAPISID']
-      rescue SafariCookies::Unavailable, SafariCookies::ParseError => e
-        # Surface as AuthError so the tool layer reports it as readable text
-        # rather than letting it escape as an MCP internal error.
-        raise AuthError, e.message
+      def initialize(cookies:)
+        @cookies = cookies.slice(*SESSION_COOKIE_NAMES)
+        raise AuthError, 'No Google session (missing SAPISID). Sign in to Google in that Chrome profile.' unless @cookies['SAPISID']
       end
 
       # Call a Voice API method. `path` is something like "account/get" or
@@ -84,7 +84,7 @@ module GMCP
           # Google rotates __Secure-*PSIDTS and friends under a long-lived
           # process, so a rejection here usually means our snapshot of the
           # cookies is stale rather than that the call was malformed. AuthError
-          # tells the caller to re-read them.
+          # tells the caller to fetch a fresh session.
           raise AuthError, "#{path}: HTTP #{resp.code} — #{msg}" if AUTH_FAILURE_CODES.include?(resp.code.to_s)
 
           raise OperationError, "#{path}: HTTP #{resp.code} — #{msg}"
@@ -102,7 +102,7 @@ module GMCP
           'Content-Type'        => 'application/json+protobuf',
           'Origin'              => ORIGIN,
           'Referer'             => "#{ORIGIN}/",
-          'User-Agent'          => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15',
+          'User-Agent'          => USER_AGENT,
           'X-Goog-AuthUser'     => '0',
           'X-Goog-Encode-Response-If-Executable' => 'base64',
           'X-JavaScript-User-Agent' => 'google-api-javascript-client/1.1.0',

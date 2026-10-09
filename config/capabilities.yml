@@ -17,8 +17,8 @@
 # that doc is explicit that this codebase has already been bitten by one word
 # carrying several meanings. GMCP's OAuth tokens are local_file, at
 # ~/.config/gmcp/<account>/token.yaml. Voice is `delegated` per §11.2: a session
-# held by an application we do not run, whose principal we can neither inspect
-# nor constrain.
+# held by an application we do not run (Chrome). GMCP picks the Chrome profile
+# signed in as the requested account, so the principal is still constrained.
 #
 # ── account_scoping ────────────────────────────────────────────────────────
 #
@@ -33,8 +33,8 @@
 #              connector_account is DECORATIVE for it: it names an account that
 #              constrains nothing.
 #
-# `ignored` exists because Voice has one and it would otherwise look normal. The
-# safety property of the grant model is that the account column always
+# No connector is `ignored` today; the value stays so that one which cannot be
+# scoped is forced to say so rather than look normal. The safety property of the grant model is that the account column always
 # constrains; a connector that quietly violates that has to say so in a field a
 # UI can read, not in a comment. Render an `ignored` grant as the principal it
 # actually reaches, never as the account named on the row.
@@ -129,22 +129,19 @@ connectors:
 
   # ── Voice ────────────────────────────────────────────────────────────────
   - name: voice
-    account_scoping: ignored
+    account_scoping: enforced
     credential_source: delegated
     description: >-
-      Google Voice. There is no usable OAuth path — the token-to-cookie exchange
-      is reserved for Chromium — so this authenticates with the session cookies
-      Safari already holds. The principal is therefore whichever Google account
-      is signed in to Safari, resolved at call time by a browser GMCP does not
-      control. GMCP_ACCOUNTS cannot narrow it. Granting any voice.* capability
-      grants reach over that Safari account whatever the grant's
-      connector_account says. Call voice_account to observe which account that
-      currently is.
+      Google Voice, per account. There is no usable OAuth path, so the session
+      is read from the Chrome profile signed in as the requested account —
+      found by email in Chrome's profile list, never by guessing — and an
+      account with no such profile has no Voice. GMCP_ACCOUNTS constrains it
+      like any other connector.
     capabilities:
       - name: voice.read
         description: >-
-          List and search Voice messages, calls, and voicemail, and report which
-          account the current Safari session resolves to.
+          List and search Voice messages, calls, and voicemail, and report an
+          account's Voice number.
         tools: [voice_account, voice_list, voice_search]
 
       - name: voice.modify

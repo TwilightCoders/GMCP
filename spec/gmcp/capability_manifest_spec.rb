@@ -116,12 +116,11 @@ RSpec.describe 'capability manifest' do
     end
 
     # The safety property of the grant model is that connector_account always
-    # constrains. Voice violates it — its principal is whichever Google account
-    # Safari holds, resolved outside GMCP — so it must SAY so in a field a
-    # registration UI can read, not in a comment a UI cannot.
-    it 'marks Voice as ignoring account scoping' do
+    # constrains. Voice's session is held by Chrome, but GMCP selects the
+    # profile signed in as the requested account, so it still constrains.
+    it 'marks Voice as delegated to Chrome but scoped to the account' do
       voice = connectors.find { |c| c['name'] == 'voice' }
-      expect(voice.fetch('account_scoping')).to eq('ignored')
+      expect(voice.fetch('account_scoping')).to eq('enforced')
       expect(voice.fetch('credential_source')).to eq('delegated')
     end
 
@@ -137,11 +136,11 @@ RSpec.describe 'capability manifest' do
       end
     end
 
-    it 'surfaces exactly the voice capabilities as unscoped grants' do
+    it 'has no unscoped grants, Voice included' do
       original = ENV.fetch('GMCP_CAPABILITIES', :unset)
       ENV['GMCP_CAPABILITIES'] = 'gmail.read,voice.read,voice.modify'
       GMCP::Capabilities.reset!
-      expect(GMCP::Capabilities.unscoped_grants).to contain_exactly('voice.read', 'voice.modify')
+      expect(GMCP::Capabilities.unscoped_grants).to be_empty
     ensure
       original == :unset ? ENV.delete('GMCP_CAPABILITIES') : ENV['GMCP_CAPABILITIES'] = original
       GMCP::Capabilities.reset!

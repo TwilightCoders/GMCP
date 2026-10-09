@@ -28,6 +28,15 @@ module GMCP
       error ? ToolHelpers.error_response(error) : result
     end
 
+    # The account a tool call names, or the default one; refuses an account
+    # outside GMCP_ACCOUNTS. For tools that do not bind Google APIs (Voice).
+    def self.configured_account(account)
+      account ||= registry.default_account
+      return account if account && registry.accounts.include?(account)
+
+      raise ArgumentError, registry.authorization_message(account)
+    end
+
     def self.build_server
       server = MCP::Server.new(name: SERVER_NAME, version: SERVER_VERSION)
       register_auth_tool(server)

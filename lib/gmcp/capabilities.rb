@@ -54,7 +54,7 @@ module GMCP
     ACCOUNT_SCOPING = %w[enforced ignored].freeze
 
     # identity-permissions §3 vocabulary, used verbatim rather than a GMCP
-    # dialect. Voice is `delegated` per §11.2.
+    # dialect. Voice is `delegated` per §11.2: Chrome holds its session.
     CREDENTIAL_SOURCES = %w[local_file keychain delegated none].freeze
 
     def self.declared

@@ -5,7 +5,9 @@
 # Iterates every category, paginates via cursor, writes one JSON record per
 # thread to bin/voice_dump.jsonl, and prints a per-category summary.
 #
-# Reads Safari's cookies directly from ~/Library/Cookies/Cookies.binarycookies.
+#   bin/voice_dump <account>
+#
+# Reads the session from the Chrome profile signed in as <account>.
 # Makes ZERO mutating calls.
 
 require 'bundler/setup'
@@ -18,7 +20,8 @@ PAGE_SIZE   = 20
 MAX_PAGES   = 100          # safety cap per category (100 × 20 = 2000 threads)
 SLEEP_SEC   = 0.15         # polite throttle between calls
 
-session = GMCP::Voice::Session.new
+account = ARGV[0] or abort "Usage: #{File.basename($PROGRAM_NAME)} <account>"
+session = GMCP::Voice::Session.for(account)
 
 THREAD_ID_PATTERN = /\A[tc]\./.freeze
 

@@ -143,7 +143,7 @@ GMCP_CAPABILITIES=gmail.read,gmail.send bin/gmcp
 | `calendar.write` | Create, update, RSVP |
 | `calendar.delete` | Delete an event |
 | `drive.read` | Search, list folders, read files |
-| `voice.read` | List/search Voice; report which account Safari resolves to |
+| `voice.read` | List/search Voice; report an account's Voice number |
 | `voice.modify` | Mark a conversation read |
 
 `config/capabilities.yml` is the source of truth; a spec asserts it matches the
@@ -211,9 +211,9 @@ per capability set; that process may now serve several accounts safely.
 
 ### Connectors and account scoping
 
-the host models `gmail`, `google_calendar`, `drive`, and `voice` as separate
-connectors. One GMCP process serves all of them, and **they do not share account
-semantics.** Each declares which it has in `config/capabilities.yml`:
+GMCP models `gmail`, `google_calendar`, `drive`, and `voice` as separate
+connectors, served by one process. Each declares in `config/capabilities.yml`
+whether `GMCP_ACCOUNTS` constrains it and where its credential lives:
 
 | Connector | `account_scoping` | `credential_source` | `GMCP_ACCOUNTS` constrains it? |
 |---|---|---|---|
@@ -221,28 +221,18 @@ semantics.** Each declares which it has in `config/capabilities.yml`:
 | `gmail` | `enforced` | `local_file` | yes |
 | `google_calendar` | `enforced` | `local_file` | yes |
 | `drive` | `enforced` | `local_file` | yes |
-| `voice` | **`ignored`** | `delegated` | **no** |
+| `voice` | `enforced` | `delegated` (Chrome) | yes |
 
 Voice has no usable OAuth path — the token-to-cookie exchange is reserved for
-Chromium — so `GMCP::Voice::Session` authenticates with the session cookies
-Safari already holds. Its principal is **whichever Google account is signed in to
-Safari**, resolved at call time by a browser GMCP does not control.
-`GMCP_ACCOUNTS` cannot narrow it.
+Chromium — so `GMCP::Voice::Session` uses the Google session of the **Chrome
+profile signed in as the requested account**, found by email in Chrome's profile
+list. Voice tools take `account:` like the rest and are limited to
+`GMCP_ACCOUNTS`; an account with no Chrome profile has no Voice. Chrome keeps
+the session fresh as you use it, so there is no separate sign-in.
 
-This matters beyond GMCP. In a grant model where the account column is the unit
-of scoping, a Voice grant reads as scoped and is not: the `connector_account` on
-it is decorative. That is why `account_scoping` is a field a UI can read rather
-than a note — an `ignored` grant should be rendered as the principal it actually
-reaches ("whichever account Safari holds"), never as the account named on the
-row. `bin/gmcp` prints the same warning at startup for any granted capability
-whose connector ignores scoping.
-
-Call `voice_account` to observe which account that currently is.
-
-Safari keeps its cookies in its sandbox container, which macOS protects: the
-app that runs GMCP (your terminal, or the MCP client) needs **Full Disk
-Access** under System Settings → Privacy & Security, or every Voice tool
-reports that access was denied.
+Chrome encrypts its cookies with a key in the macOS Keychain ("Chrome Safe
+Storage"). The first Voice call asks for access; choose **Always Allow**.
+Voice is macOS-only for that reason.
 
 ## Development
 

@@ -155,7 +155,8 @@ describe GMCP::Voice::Tools, 'registered tools' do
 
   before do
     described_class.register(server)
-    allow(GMCP::Voice::Session).to receive(:new).and_return(session)
+    allow(GMCP::Server).to receive(:configured_account) { |account| account || 'me@example.com' }
+    allow(GMCP::Voice::Session).to receive(:for).with('me@example.com').and_return(session)
   end
 
   after { described_class.reset_session! }

@@ -50,10 +50,8 @@ This project adheres to [Semantic Versioning](https://semver.org/).
   files or anything over 1 MB are refused with a reason.
 - **Every Voice tool but `voice_account` crashed**, calling an API Google has
   retired. `voice_list` and `voice_search` are rebuilt on the current web API.
-- **Voice cookies were read from the wrong file**, expired cookies could
-  shadow live ones, a denied read crashed, and a rejected session needed a
-  restart. The sandbox container is read first, expiry is honored, a denial
-  explains Full Disk Access, and a 401/403 re-reads the cookies.
+- **A rejected Voice session needed a restart.** A 401/403 now drops the
+  session so the next call reads a fresh one.
 
 ### Changed
 
@@ -67,9 +65,16 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 - `calendar_list_events`, `drive_search` and `drive_list_folder` return a
   `page_token` when more results exist; Drive includes shared drives.
 - `voice_mark_read` takes a `thread_id` and only marks read.
+- **Voice no longer depends on Safari, and is scoped by account.** It reads the
+  session of the Chrome profile signed in as the requested account, so Voice
+  tools take `account:` and `GMCP_ACCOUNTS` constrains them like every other
+  connector (`account_scoping: enforced`). No Full Disk Access is needed; the
+  first call asks for Keychain access to Chrome's cookie key. `bin/voice_dump`
+  takes an account.
 
 ### Removed
 
+- The Safari cookie reader.
 - `voice_archive`, `voice_delete` and the `voice.trash` capability: their
   requests on the current Voice API are unconfirmed, and a mutation is not
   something to guess at.
