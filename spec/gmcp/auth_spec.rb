@@ -33,6 +33,7 @@ describe GMCP::Auth do
     it 'includes calendar and drive scopes' do
       expect(described_class.scopes).to include(
         'https://www.googleapis.com/auth/calendar.events',
+        'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
         'https://www.googleapis.com/auth/drive.readonly'
       )
     end

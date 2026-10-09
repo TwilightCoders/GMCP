@@ -3,6 +3,12 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.1]
+
+### Fixed
+
+- `calendar_list_calendars` works. Existing accounts must re-authorize once to grant the added `calendar.calendarlist.readonly` scope.
+
 ## [0.5.0]
 
 ### Fixed

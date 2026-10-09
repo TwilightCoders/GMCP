@@ -6,9 +6,11 @@ gmail:
 
 calendar:
   - https://www.googleapis.com/auth/calendar.events
+  # calendar.events does not cover calendarList, which calendar_list_calendars reads.
+  - https://www.googleapis.com/auth/calendar.calendarlist.readonly
 
 drive:
   - https://www.googleapis.com/auth/drive.readonly
 
-voice:
+account:
   - https://www.googleapis.com/auth/userinfo.email

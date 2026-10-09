@@ -10,7 +10,8 @@ and Google's OAuth2 library (`googleauth`).
 
 The built-in claude.ai Gmail/Calendar connectors have limited OAuth scopes —
 no trash, no labels, no send, no Drive access. GMCP runs as a local stdio MCP
-server with full `gmail.modify`, `calendar.events`, and `drive.readonly` scopes.
+server with full `gmail.modify`, `calendar.events`,
+`calendar.calendarlist.readonly` and `drive.readonly` scopes.
 
 ## Tools
 
