@@ -13,7 +13,8 @@
 # option for a desktop client, and it is what Auth.authorize_interactive!
 # implements.
 
-require 'bundler/setup'
+# Bundler only in a checkout; an installed gem resolves through RubyGems.
+require 'bundler/setup' if File.exist?(File.expand_path('../Gemfile', __dir__))
 require_relative '../lib/gmcp'
 
 # Unbuffered so progress is visible when stdout is a pipe, not just a TTY.

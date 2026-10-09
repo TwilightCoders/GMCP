@@ -9,7 +9,8 @@
 #
 # Defaults to a broad sample so we can spot the bulk-win senders quickly.
 
-require 'bundler/setup'
+# Bundler only in a checkout; an installed gem resolves through RubyGems.
+require 'bundler/setup' if File.exist?(File.expand_path('../Gemfile', __dir__))
 require_relative '../lib/gmcp'
 require 'json'
 require 'optparse'

@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
-require 'bundler/setup'
+# Bundler only in a checkout; an installed gem resolves through RubyGems.
+require 'bundler/setup' if File.exist?(File.expand_path('../Gemfile', __dir__))
 require_relative '../lib/gmcp'
 
 accounts = if ENV['GMCP_ACCOUNTS']
