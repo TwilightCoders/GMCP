@@ -1,62 +1,66 @@
 # frozen_string_literal: true
 
-require 'json'
-
 module GMCP
   module Voice
+    # One page of threads from api2thread/list, the endpoint voice.google.com
+    # itself uses. The request is positional:
+    #
+    #   [folder_id, threads_per_page, messages_per_thread, cursor, _, [_, 1, 1, 1]]
+    #
+    # The trailing array is what the web client always sends. The cursor is the
+    # newest-message timestamp (ms, as a string) of the last thread on the
+    # previous page; nil asks for the most recent page.
+    #
+    # The response is [threads, _, version_token].
     class Folder
-      class ParseError < StandardError; end
+      PAGE_SIZE           = 20
+      MESSAGES_PER_THREAD = 15
+      SEARCH_PAGES        = 10
+      MAX_SEARCH_PAGES    = 50
 
-      # The feeds return XML with embedded JSON inside a <json> tag.
-      JSON_TAG_PATTERN = %r{<json[^>]*>(.*?)</json>}m.freeze
-      CDATA_PATTERN    = /\A<!\[CDATA\[(.*)\]\]>\z/m.freeze
+      attr_reader :name, :conversations
 
-      attr_reader :name, :total_size, :unread_counts, :results_per_page
-
-      def self.fetch(session, feed_name)
-        url = FEED_URLS.fetch(feed_name.to_sym) { raise ArgumentError, "Unknown feed: #{feed_name}. Valid: #{FEEDS.join(', ')}" }
-        resp = session.get(url)
-        raise "Feed request failed (#{resp.code})" unless resp.is_a?(Net::HTTPSuccess)
-        new(session, feed_name, resp.body)
+      def self.fetch(session, name = 'all', cursor: nil)
+        id = FOLDERS.fetch(name.to_s) do
+          raise ArgumentError, "Unknown folder: #{name}. Valid: #{FOLDERS.keys.join(', ')}"
+        end
+        body = [id, PAGE_SIZE, MESSAGES_PER_THREAD, cursor&.to_s, nil, [nil, 1, 1, 1]]
+        new(name.to_s, session.call('api2thread/list', body))
       end
 
-      def self.search(session, query)
-        resp = session.get(SEARCH_URL, params: { q: query })
-        raise "Search request failed (#{resp.code})" unless resp.is_a?(Net::HTTPSuccess)
-        new(session, 'search', resp.body)
+      # The API has no server-side search we can call, so walk recent pages
+      # and match locally. Bounded, because the call log reaches back years
+      # and each page is a round trip.
+      def self.search(session, query, folder: 'all', pages: SEARCH_PAGES)
+        pages = pages.to_i.clamp(1, MAX_SEARCH_PAGES)
+        matches = []
+        scanned = 0
+        cursor = nil
+        pages.times do
+          page = fetch(session, folder, cursor: cursor)
+          scanned += page.conversations.size
+          matches.concat(page.conversations.select { |c| c.matches?(query) })
+          following = page.next_cursor
+          break if following.nil? || following == cursor
+
+          cursor = following
+        end
+        [matches, scanned]
       end
 
-      def initialize(session, name, body)
-        @session = session
-        @name    = name
-        @data    = parse_feed(body)
-
-        @total_size      = @data['totalSize']
-        @results_per_page = @data['resultsPerPage']
-        @unread_counts   = @data['unreadCounts'] || {}
+      def initialize(name, response)
+        @name = name
+        rows = response.is_a?(Array) && response[0].is_a?(Array) ? response[0] : []
+        @conversations = rows.filter_map { |row| Conversation.from_jspb(row) }
       end
 
-      def messages
-        (@data['messages'] || {}).map { |id, attrs| Message.new(@session, id, attrs) }
-      end
-
-      def size
-        @total_size.to_i
+      # Cursor for the page after this one, or nil when this page was empty.
+      def next_cursor
+        @conversations.last&.latest&.timestamp_ms&.to_s
       end
 
       def inspect
-        "#<Voice::Folder #{@name} (#{size} messages)>"
-      end
-
-      private
-
-      def parse_feed(body)
-        match = JSON_TAG_PATTERN.match(body) or raise ParseError, 'No <json> section in feed response'
-        raw = match[1].strip
-        raw = CDATA_PATTERN.match(raw)&.captures&.first&.strip || raw
-        JSON.parse(raw)
-      rescue JSON::ParserError => e
-        raise ParseError, "Feed JSON parse error: #{e.message}"
+        "#<Voice::Folder #{@name} (#{@conversations.size} threads)>"
       end
     end
   end

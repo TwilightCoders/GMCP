@@ -86,7 +86,6 @@ RSpec.describe 'capability manifest' do
     expect(manifest_pairs['gmail_trash_message']).to eq('gmail.trash')
     expect(manifest_pairs['gmail_send']).to eq('gmail.send')
     expect(manifest_pairs['calendar_delete_event']).to eq('calendar.delete')
-    expect(manifest_pairs['voice_delete']).to eq('voice.trash')
   end
 
   it 'names the gmail label verb no more broadly than it reaches' do
@@ -140,9 +139,9 @@ RSpec.describe 'capability manifest' do
 
     it 'surfaces exactly the voice capabilities as unscoped grants' do
       original = ENV.fetch('GMCP_CAPABILITIES', :unset)
-      ENV['GMCP_CAPABILITIES'] = 'gmail.read,voice.read,voice.trash'
+      ENV['GMCP_CAPABILITIES'] = 'gmail.read,voice.read,voice.modify'
       GMCP::Capabilities.reset!
-      expect(GMCP::Capabilities.unscoped_grants).to contain_exactly('voice.read', 'voice.trash')
+      expect(GMCP::Capabilities.unscoped_grants).to contain_exactly('voice.read', 'voice.modify')
     ensure
       original == :unset ? ENV.delete('GMCP_CAPABILITIES') : ENV['GMCP_CAPABILITIES'] = original
       GMCP::Capabilities.reset!

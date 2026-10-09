@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'mcp'
+require 'time'
 
 module GMCP
   module Voice
@@ -44,16 +45,20 @@ module GMCP
           server,
           name: 'voice_list',
           capability: 'voice.read',
-          description: "List Google Voice messages from a folder. Folders: #{FEEDS.join(', ')}",
+          description: 'List Google Voice threads (texts, calls, voicemail), newest first, 20 per page. ' \
+                       "Folders: #{FOLDERS.keys.join(', ')}. Pass the returned next_cursor to get the next page.",
           properties: {
-            folder: { type: 'string', description: 'Folder name (default: inbox)' }
+            folder: { type: 'string', description: 'Folder name (default: all)' },
+            cursor: { type: 'string', description: 'next_cursor from a previous voice_list call' }
           }
-        ) do |folder: 'inbox'|
+        ) do |folder: 'all', cursor: nil|
           Tools.guarding do
-            f = Folder.fetch(Tools.session, folder)
-            ToolHelpers.list_response(f.messages, empty_message: "No messages in #{folder}.") do |m|
-              "#{m.id} [#{m.type_name}] #{m.displayNumber} #{m.displayStartDateTime} read=#{m.isRead}"
-            end
+            page = Folder.fetch(Tools.session, folder, cursor: cursor)
+            lines = page.conversations.map { |c| Tools.format(c) }
+            next ToolHelpers.text_response("No threads in #{folder}.") if lines.empty?
+
+            lines << "next_cursor: #{page.next_cursor}"
+            ToolHelpers.text_response(lines.join("\n"))
           end
         end
 
@@ -61,16 +66,20 @@ module GMCP
           server,
           name: 'voice_search',
           capability: 'voice.read',
-          description: 'Search Google Voice call/SMS/voicemail history',
+          description: 'Search recent Google Voice threads by contact name, phone number, or message text. ' \
+                       'Matches locally over the newest pages of a folder (20 threads per page), so older ' \
+                       'history is only reached by raising pages or narrowing the folder.',
           properties: {
-            query: { type: 'string', description: 'Search query' }
+            query:  { type: 'string', description: 'Text, name, or phone number to look for' },
+            folder: { type: 'string', description: "Folder to scan (default: all). One of #{FOLDERS.keys.join(', ')}" },
+            pages:  { type: 'integer', description: "Pages to scan (default: #{Folder::SEARCH_PAGES}, max: #{Folder::MAX_SEARCH_PAGES})" }
           },
           required: ['query']
-        ) do |query:|
+        ) do |query:, folder: 'all', pages: Folder::SEARCH_PAGES|
           Tools.guarding do
-            f = Folder.search(Tools.session, query)
-            ToolHelpers.list_response(f.messages, empty_message: 'No results.') do |m|
-              "#{m.id} [#{m.type_name}] #{m.displayNumber} #{m.displayStartDateTime}"
+            matches, scanned = Folder.search(Tools.session, query, folder: folder, pages: pages)
+            ToolHelpers.list_response(matches, empty_message: "No matches in the #{scanned} most recent #{folder} threads.") do |c|
+              Tools.format(c)
             end
           end
         end
@@ -79,50 +88,17 @@ module GMCP
       def self.register_write(server)
         ToolHelpers.define_tool(
           server,
-          name: 'voice_archive',
-          capability: 'voice.modify',
-          description: 'Archive a Google Voice message (remove from inbox)',
-          properties: {
-            message_id: { type: 'string' }
-          },
-          required: ['message_id']
-        ) do |message_id:|
-          Tools.guarding do
-            Message.new(Tools.session, message_id, {}).archive!
-            ToolHelpers.text_response("Message #{message_id} archived.")
-          end
-        end
-
-        ToolHelpers.define_tool(
-          server,
           name: 'voice_mark_read',
           capability: 'voice.modify',
-          description: 'Mark a single Google Voice message as read or unread',
+          description: 'Mark a Google Voice thread as read. Takes a thread id from voice_list or voice_search.',
           properties: {
-            message_id: { type: 'string' },
-            read:       { type: 'boolean', description: 'true = mark read, false = mark unread (default: true)' }
+            thread_id: { type: 'string' }
           },
-          required: ['message_id']
-        ) do |message_id:, read: true|
+          required: ['thread_id']
+        ) do |thread_id:|
           Tools.guarding do
-            Message.new(Tools.session, message_id, {}).mark_read!(read: read)
-            ToolHelpers.text_response("Message #{message_id} marked #{read ? 'read' : 'unread'}.")
-          end
-        end
-
-        ToolHelpers.define_tool(
-          server,
-          name: 'voice_delete',
-          capability: 'voice.trash',
-          description: 'Move a Google Voice message to trash',
-          properties: {
-            message_id: { type: 'string' }
-          },
-          required: ['message_id']
-        ) do |message_id:|
-          Tools.guarding do
-            Message.new(Tools.session, message_id, {}).delete!
-            ToolHelpers.text_response("Message #{message_id} moved to trash.")
+            Tools.session.call('thread/updateattributes', Tools.mark_read_body(thread_id))
+            ToolHelpers.text_response("Thread #{thread_id} marked read.")
           end
         end
       end
@@ -146,6 +122,29 @@ module GMCP
         def account_number
           resp = session.call('account/get', [])
           resp.dig(0, 0) if resp.is_a?(Array)
+        end
+
+        # thread/updateattributes takes the new attributes, then a second
+        # attributes record naming which fields to change, then 1. Only `read`
+        # (field 4) is set in both, so nothing else about the thread is touched.
+        # Shape taken from a working open-source Voice client, not from probing:
+        # mutations are never sent to a live account to discover their format.
+        def mark_read_body(thread_id)
+          [
+            [thread_id, nil, nil, true, nil, nil, nil, nil],
+            [nil, nil, nil, true, nil, nil, nil, nil],
+            1
+          ]
+        end
+
+        def format(conversation)
+          latest = conversation.latest
+          parts = [conversation.id, "[#{latest&.type_name || 'empty'}]", conversation.counterparty]
+          parts << latest.time.iso8601 if latest&.time
+          parts << "read=#{conversation.read?}"
+          preview = latest&.text.to_s.gsub(/\s+/, ' ').strip
+          parts << "— #{preview[0, 120]}" unless preview.empty?
+          parts.join(' ')
         end
 
         # Uniform error surface for every voice tool, with Voice-specific advice

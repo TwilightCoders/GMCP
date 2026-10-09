@@ -148,9 +148,5 @@ connectors:
         tools: [voice_account, voice_list, voice_search]
 
       - name: voice.modify
-        description: Archive a Voice thread, or mark a single message read/unread.
-        tools: [voice_archive, voice_mark_read]
-
-      - name: voice.trash
-        description: Move a Voice message to the trash. Separate because it is destructive.
-        tools: [voice_delete]
+        description: Mark a Voice thread read. Touches the read flag and nothing else.
+        tools: [voice_mark_read]

@@ -99,7 +99,7 @@ RSpec.describe GMCP::Capabilities do
     it 'separates destructive and outbound verbs from ordinary modification' do
       expect(described_class::ALL).to include('gmail.read', 'gmail.modify_labels', 'gmail.trash', 'gmail.send')
       expect(described_class::ALL).to include('calendar.read', 'calendar.write', 'calendar.delete')
-      expect(described_class::ALL).to include('voice.read', 'voice.modify', 'voice.trash')
+      expect(described_class::ALL).to include('voice.read', 'voice.modify')
     end
 
     it 'contains no wildcard entry' do

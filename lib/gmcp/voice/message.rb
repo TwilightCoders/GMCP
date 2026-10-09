@@ -2,47 +2,79 @@
 
 module GMCP
   module Voice
+    # One call, voicemail, or text inside a Conversation, decoded from the
+    # positional (JSPB) array the API returns. Index N holds proto field N+1:
+    #
+    #   [id, timestamp_ms, destination_id, contact, type, status, transcript,
+    #    _, duration_s, text, _, media_url, coarse_type, transcript_status, mms]
+    #
+    # contact is [name, phone_number]; mms is [text, subject, attachments, ...];
+    # transcript is [confidence, [[token_bytes_base64, ...], ...]].
     class Message
-      ATTRS = %w[
-        id phoneNumber displayNumber startTime displayStartDateTime
-        relativeStartTime isRead isTrash isSpam star note labels type children
-      ].freeze
+      attr_reader :id, :timestamp_ms, :type, :name, :phone_number, :duration, :text
 
-      attr_reader(*ATTRS.map(&:to_sym), :type_name)
+      def self.from_jspb(row)
+        return nil unless row.is_a?(Array) && row[0].is_a?(String)
 
-      def initialize(session, id, data)
-        @session = session
-        @id      = id
-        ATTRS.each { |a| instance_variable_set(:"@#{a}", data[a]) }
-        @type_name = MESSAGE_TYPES[@type.to_i]
+        new(row)
       end
 
-      def delete!(trash: true)
-        @session.post(OPERATION_URLS[:delete], 'messages' => @id, 'trash' => trash ? '1' : '0')
+      def initialize(row)
+        @id           = row[0]
+        @timestamp_ms = integer(row[1])
+        @name, @phone_number = Message.split_contact(row[3])
+        @type         = integer(row[4])
+        @read         = integer(row[5]) == 1
+        @duration     = row[8].is_a?(Numeric) ? row[8] : nil
+        @text         = present(row[9]) || present(row[14].is_a?(Array) ? row[14][0] : nil) || transcript(row[6])
       end
 
-      def archive!
-        @session.post(OPERATION_URLS[:archive], 'messages' => @id, 'archive' => '1')
+      def read?
+        @read
       end
 
-      def mark_read!(read: true)
-        @session.post(OPERATION_URLS[:mark], 'messages' => @id, 'read' => read ? '1' : '0')
+      def type_name
+        MESSAGE_TYPES.fetch(@type, "type#{@type}")
       end
 
-      def star!(star: true)
-        @session.post(OPERATION_URLS[:star], 'messages' => @id, 'star' => star ? '1' : '0')
+      def time
+        Time.at(@timestamp_ms / 1000.0) if @timestamp_ms
       end
 
-      def to_s
-        @id.to_s
+      # A contact is [name, phone], but either slot may be empty, so classify
+      # by content rather than trusting position for which is the number.
+      def self.split_contact(contact)
+        strings = Array(contact).grep(String).reject(&:empty?)
+        phone = strings.find { |s| s.match?(/\A\+?[\d\s().-]{3,}\z/) }
+        [(strings - [phone]).first, phone]
       end
 
-      def inspect
-        "#<Voice::Message #{@id} #{@type_name} from=#{@displayNumber}>"
+      private
+
+      def integer(value)
+        Integer(value)
+      rescue ArgumentError, TypeError
+        nil
       end
 
-      def to_h
-        ATTRS.each_with_object({}) { |a, h| h[a] = instance_variable_get(:"@#{a}") }
+      def present(value)
+        value.is_a?(String) && !value.empty? ? value : nil
+      end
+
+      # Voicemail transcripts arrive as base64 token bytes. Anything that does
+      # not decode to valid UTF-8 is used as-is rather than dropped.
+      def transcript(raw)
+        tokens = raw.is_a?(Array) && raw[1].is_a?(Array) ? raw[1] : []
+        words = tokens.filter_map do |token|
+          bytes = token.is_a?(Array) ? token[0] : nil
+          next unless bytes.is_a?(String)
+
+          decoded = bytes.unpack1('m0').force_encoding('UTF-8')
+          decoded.valid_encoding? ? decoded : bytes
+        rescue ArgumentError
+          bytes
+        end
+        words.empty? ? nil : words.join(' ')
       end
     end
   end
