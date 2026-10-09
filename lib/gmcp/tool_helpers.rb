@@ -16,6 +16,12 @@ module GMCP
       MCP::Tool::Response.new([{ type: 'text', text: text }])
     end
 
+    # Marked isError, so the client knows the call failed rather than having to
+    # guess from the wording.
+    def self.error_response(text)
+      MCP::Tool::Response.new([{ type: 'text', text: text }], error: true)
+    end
+
     # Him models do not include ActiveModel::Serializers::JSON, so `to_json` on
     # one resolves to Object#to_json and yields the inspect string —
     # "#<GMCP::Gmail::Message:0x...>". That is valid JSON and completely empty
@@ -40,13 +46,43 @@ module GMCP
     # appears in tools/list. See GMCP::Capabilities.
     #
     # Returns the tool on registration, nil when gated out.
+    #
+    # Every failure becomes an isError response here, once, instead of each
+    # tool rescuing its own way or letting the exception escape as a JSON-RPC
+    # internal error that hides the cause.
     def self.define_tool(server, name:, description:, properties:, required: nil, capability: nil, &block)
       declarations[name] = capability
       return nil unless Capabilities.enabled?(capability)
 
       schema = { properties: properties }
       schema[:required] = required if required
-      server.define_tool(name: name, description: description, input_schema: schema, &block)
+      # Declared with **args, so MCP passes server_context; the tool blocks do
+      # not take it. MCP installs this as the tool's own `call`, so self is the
+      # tool there: name the module explicitly.
+      handler = lambda do |**args|
+        args.delete(:server_context)
+        ToolHelpers.guarded { block.call(**args) }
+      end
+      server.define_tool(name: name, description: description, input_schema: schema, &handler)
+    end
+
+    # A tool that acts on a Google account: adds the `account` parameter and
+    # runs the block with that account bound.
+    def self.account_tool(server, properties:, **options, &block)
+      define_tool(server, properties: properties.merge(ACCOUNT_PARAM), **options) do |account: nil, **args|
+        GMCP::Server.with_account(account) { block.call(**args) }
+      end
+    end
+
+    def self.guarded
+      yield
+    rescue ApiError, Auth::AuthRequired, ApiBinding::NotBound, ArgumentError => e
+      error_response(e.message)
+    rescue Signet::AuthorizationError => e
+      error_response("Google rejected the stored token (#{e.message.lines.first&.strip}). Call gmcp_authorize to reconnect.")
+    rescue StandardError => e
+      warn "GMCP tool error: #{e.class}: #{e.message}\n#{e.backtrace&.first(5)&.join("\n")}"
+      error_response("#{e.class}: #{e.message}")
     end
 
     def self.list_response(items, empty_message:, &formatter)

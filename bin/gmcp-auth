@@ -36,10 +36,12 @@ unless File.exist?(GMCP::Auth.credentials_path)
         "3. Save the JSON to that path"
 end
 
-authorized = false
+result = Queue.new
 url = GMCP::Auth.authorize_interactive!(
   account: account,
-  on_success: ->(_acct) { authorized = true }
+  timeout: TIMEOUT,
+  on_success: ->(_acct) { result << :authorized },
+  on_failure: ->(_acct, error) { result << error }
 )
 
 puts "Authorizing #{account} — a browser window should have opened."
@@ -47,17 +49,12 @@ puts
 puts "If it did not, open this manually:"
 puts "  #{url}"
 puts
-print 'Waiting for the callback'
+puts 'Waiting for the callback…'
 
-waited = 0
-until authorized || waited >= TIMEOUT
-  sleep 1
-  waited += 1
-  print '.' if (waited % 5).zero?
+case (outcome = result.pop(timeout: TIMEOUT))
+when nil       then abort "Timed out after #{TIMEOUT}s with no callback. Nothing was stored."
+when Exception then abort "Authorization failed: #{outcome.class}: #{outcome.message}"
 end
-puts
-
-abort "\nTimed out after #{TIMEOUT}s with no callback. Nothing was stored." unless authorized
 
 # Prove the stored token actually works rather than trusting the callback.
 begin

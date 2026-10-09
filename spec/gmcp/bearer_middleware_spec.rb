@@ -32,3 +32,19 @@ describe GMCP::BearerMiddleware do
     expect(env[:request_headers]['Content-Type']).to eq('application/json')
   end
 end
+
+describe GMCP::BearerMiddleware, 'with a token provider' do
+  it 'asks the provider on every request, so a refreshed token is picked up' do
+    tokens = %w[first second].each
+    seen = []
+    middleware = described_class.new(->(env) { seen << env[:request_headers]['Authorization'] }, token: -> { tokens.next })
+
+    2.times do
+      env = Faraday::Env.new
+      env[:request_headers] = Faraday::Utils::Headers.new
+      middleware.call(env)
+    end
+
+    expect(seen).to eq(['Bearer first', 'Bearer second'])
+  end
+end

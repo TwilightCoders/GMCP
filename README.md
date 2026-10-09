@@ -95,7 +95,7 @@ given process was actually granted.
 
 Ask Claude to call `gmcp_authorize`, or run `bin/gmcp-auth <account>` from a terminal. Either opens your browser and captures the redirect on a temporary local callback server — there is nothing to copy and paste. (Google retired the out-of-band code flow in 2022.)
 
-Tokens are stored at `~/.config/gmcp/<account>/token.yaml` and refresh automatically. If a refresh token is revoked, the server still starts — the account is left unbound and reports that it needs re-authorizing, rather than taking the whole server down.
+Tokens are stored owner-only at `~/.config/gmcp/<account>/token.yaml`, and access tokens refresh automatically while the server runs. If a refresh token is revoked, the server still starts — the account is left unbound and reports that it needs re-authorizing, rather than taking the whole server down.
 
 ## Multiple accounts and capability scoping
 

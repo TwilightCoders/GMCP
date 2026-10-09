@@ -11,6 +11,7 @@ module GMCP
   end
 
   autoload :Auth,             'gmcp/auth'
+  autoload :ApiError,         'gmcp/api_error'
   autoload :BearerMiddleware, 'gmcp/bearer_middleware'
   autoload :Apis,             'gmcp/apis'
   autoload :ApiBinding,       'gmcp/api_binding'

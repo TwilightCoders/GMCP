@@ -4,8 +4,12 @@ module GMCP
     CALENDAR_BASE = 'https://www.googleapis.com/calendar/v3/'
     DRIVE_BASE    = 'https://www.googleapis.com/drive/v3/'
 
+    # Fails fast (AuthRequired, or a refresh error) when the account has no
+    # usable token, then resolves the access token per request so it is
+    # refreshed as it nears expiry.
     def self.build_for_account(account:)
-      token = Auth.access_token(account:)
+      Auth.credentials(account:)
+      token = -> { Auth.access_token(account:) }
       {
         gmail:    build_api(GMAIL_BASE,    token),
         calendar: build_api(CALENDAR_BASE, token),
@@ -15,9 +19,11 @@ module GMCP
 
     def self.build_api(base_url, token)
       Him::API.new(url: base_url) do |conn|
+        conn.options.params_encoder = Faraday::FlatParamsEncoder # labelIds=a&labelIds=b, as Google expects
         conn.request :json
         conn.use BearerMiddleware, token: token
         conn.use Him::Middleware::DefaultParseJSON
+        conn.use ApiError::Middleware
         conn.adapter Faraday.default_adapter
       end
     end

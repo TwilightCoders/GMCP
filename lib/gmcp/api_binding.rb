@@ -7,12 +7,9 @@ module GMCP
   # :call (him/lib/him/model/http.rb). Binding a *resolver* once therefore lets
   # the API in effect change per fiber without ever mutating class state again.
   #
-  # This is what makes it safe for one process to serve more than one account.
-  # Previously `activate` wrote the API onto the model class itself, so two
-  # concurrent requests for different accounts raced on process-global state and
-  # the second could execute against the first's mailbox. Isolation depended on
-  # never running two at once — which is not isolation, only an absence of
-  # opportunity.
+  # This is what makes it safe for one process to serve more than one account:
+  # writing the API onto the model class instead would let two concurrent
+  # requests for different accounts race on process-global state.
   #
   # Binding is fiber-local (Thread.current[]) rather than thread-local, so it
   # holds under fiber schedulers as well as threads.
@@ -41,10 +38,6 @@ module GMCP
           models.call.each { |model| model.use_api(resolver) }
         end
         @installed = true
-      end
-
-      def installed?
-        @installed ? true : false
       end
 
       def current

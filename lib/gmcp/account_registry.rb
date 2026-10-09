@@ -32,16 +32,6 @@ module GMCP
       account && @apis[account]
     end
 
-    # Binds for the remainder of this fiber. Prefer #scoped, which restores the
-    # previous binding; this exists for callers that have no natural extent.
-    def activate(account = nil)
-      apis = apis_for(account)
-      return authorization_message(account || default_account) unless apis
-
-      ApiBinding.current = apis
-      nil
-    end
-
     # Runs the block with this account bound, restoring whatever was bound
     # before. Returns [error_message, nil] or [nil, block_result] so the caller
     # can tell an auth failure from a legitimately nil result.
@@ -67,8 +57,7 @@ module GMCP
     def load_account(account)
       @apis[account] = Apis.build_for_account(account:)
     rescue Auth::AuthRequired, Errno::ENOENT
-      # Account hasn't been authorized yet — leave unbound, gmcp_authorize will fix it.
-      nil
+      nil # not authorized yet, or no credentials.json; gmcp_authorize reports which
     rescue Signet::AuthorizationError, Google::Auth::AuthorizationError => e
       # Refresh token revoked or expired. Don't crash the whole server —
       # leave this account unbound and let the user re-authorize via gmcp_authorize.

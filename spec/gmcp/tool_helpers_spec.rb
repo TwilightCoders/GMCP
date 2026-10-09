@@ -115,3 +115,50 @@ RSpec.describe GMCP::ToolHelpers do
     end
   end
 end
+
+RSpec.describe GMCP::ToolHelpers, 'error handling' do
+  let(:server) { MCP::Server.new(name: 'test') }
+
+  def call(name, **args)
+    server.tools.fetch(name).call(**args, server_context: nil)
+  end
+
+  def define(&block)
+    described_class.define_tool(server, name: 't', description: 'x', properties: {}, &block)
+  end
+
+  it 'turns a Google API failure into an isError response with Google\'s message' do
+    define { raise GMCP::ApiError.new(404, 'Requested entity was not found.') }
+
+    response = call('t')
+    expect(response.error?).to be(true)
+    expect(response.content.first[:text]).to include('Requested entity was not found')
+  end
+
+  it 'turns an unexpected exception into an isError response naming it' do
+    define { raise NoMethodError, 'boom' }
+
+    expect { @response = call('t') }.to output(/GMCP tool error: NoMethodError/).to_stderr
+    expect(@response.error?).to be(true)
+    expect(@response.content.first[:text]).to eq('NoMethodError: boom')
+  end
+
+  it 'leaves a successful response alone' do
+    define { described_class.text_response('ok') }
+
+    expect(call('t').error?).to be(false)
+  end
+
+  describe '.account_tool' do
+    it 'adds the account parameter and binds that account around the block' do
+      allow(GMCP::Server).to receive(:with_account) { |_account, &blk| blk.call }
+      described_class.account_tool(server, name: 'a', description: 'x', properties: { q: { type: 'string' } }) do |q:|
+        described_class.text_response(q)
+      end
+
+      expect(server.tools.fetch('a').input_schema.to_h[:properties].keys).to contain_exactly(:q, :account)
+      expect(call('a', q: 'hi', account: 'me@example.com').content.first[:text]).to eq('hi')
+      expect(GMCP::Server).to have_received(:with_account).with('me@example.com')
+    end
+  end
+end

@@ -12,7 +12,7 @@ module GMCP
       end
 
       def self.register_read(server)
-        ToolHelpers.define_tool(
+        ToolHelpers.account_tool(
           server,
           name: 'gmail_search',
           capability: 'gmail.read',
@@ -21,88 +21,74 @@ module GMCP
           properties: {
             query:       { type: 'string', description: 'Gmail search query, e.g. "from:alice subject:report"' },
             max_results: { type: 'integer', description: 'Max messages per page (default 20, Gmail caps at 500)' },
-            page_token:  { type: 'string', description: 'Cursor from a previous call. Omit for the first page.' },
-            **ToolHelpers::ACCOUNT_PARAM
+            page_token:  { type: 'string', description: 'Cursor from a previous call. Omit for the first page.' }
           },
           required: ['query']
-        ) do |query:, max_results: 20, page_token: nil, account: nil|
-          GMCP::Server.with_account(account) do
-            page = Message.search_page(query, max_results: max_results, page_token: page_token)
-            lines = page[:messages].map { |m| m.id.to_s }
-            body  = lines.empty? ? 'No messages found.' : lines.join("\n")
-            if page[:next_page_token]
-              body += "\n\nMore results available. next page_token: #{page[:next_page_token]}"
-            end
-            body += "\n(Gmail estimates ~#{page[:estimate]} total matches; the estimate is approximate.)" if page[:estimate]
-            ToolHelpers.text_response(body)
+        ) do |query:, max_results: 20, page_token: nil|
+          page = Message.search_page(query, max_results: max_results, page_token: page_token)
+          lines = page[:messages].map { |m| m.id.to_s }
+          body  = lines.empty? ? 'No messages found.' : lines.join("\n")
+          if page[:next_page_token]
+            body += "\n\nMore results available. next page_token: #{page[:next_page_token]}"
           end
+          body += "\n(Gmail estimates ~#{page[:estimate]} total matches; the estimate is approximate.)" if page[:estimate]
+          ToolHelpers.text_response(body)
         end
 
-        ToolHelpers.define_tool(
+        ToolHelpers.account_tool(
           server,
           name: 'gmail_get_message',
           capability: 'gmail.read',
           description: 'Get a Gmail message by ID, with decoded headers and body text',
           properties: {
-            message_id: { type: 'string' },
-            **ToolHelpers::ACCOUNT_PARAM
+            message_id: { type: 'string' }
           },
           required: ['message_id']
-        ) do |message_id:, account: nil|
-          GMCP::Server.with_account(account) do
-            ToolHelpers.json_response(Message.find(message_id).to_summary)
-          end
+        ) do |message_id:|
+          ToolHelpers.json_response(Message.find(message_id).to_summary)
         end
 
-        ToolHelpers.define_tool(
+        ToolHelpers.account_tool(
           server,
           name: 'gmail_list_labels',
           capability: 'gmail.read',
           description: 'List all Gmail labels',
-          properties: { **ToolHelpers::ACCOUNT_PARAM }
-        ) do |account: nil|
-          GMCP::Server.with_account(account) do
-            ToolHelpers.list_response(Label.all, empty_message: 'No labels found.') { |l| "#{l.id}: #{l.name}" }
-          end
+          properties: {}
+        ) do
+          ToolHelpers.list_response(Label.all, empty_message: 'No labels found.') { |l| "#{l.id}: #{l.name}" }
         end
       end
 
       def self.register_write(server)
-        ToolHelpers.define_tool(
+        ToolHelpers.account_tool(
           server,
           name: 'gmail_trash_message',
           capability: 'gmail.trash',
           description: 'Move a Gmail message to trash',
           properties: {
-            message_id: { type: 'string' },
-            **ToolHelpers::ACCOUNT_PARAM
+            message_id: { type: 'string' }
           },
           required: ['message_id']
-        ) do |message_id:, account: nil|
-          GMCP::Server.with_account(account) do
-            Message.find(message_id).trash!
-            ToolHelpers.text_response("Message #{message_id} moved to trash.")
-          end
+        ) do |message_id:|
+          Message.find(message_id).trash!
+          ToolHelpers.text_response("Message #{message_id} moved to trash.")
         end
 
-        ToolHelpers.define_tool(
+        ToolHelpers.account_tool(
           server,
           name: 'gmail_archive_message',
           capability: 'gmail.modify_labels',
           description: 'Archive a Gmail message (remove from INBOX)',
           properties: {
-            message_id: { type: 'string' },
-            **ToolHelpers::ACCOUNT_PARAM
+            message_id: { type: 'string' }
           },
           required: ['message_id']
-        ) do |message_id:, account: nil|
-          GMCP::Server.with_account(account) do
-            Message.find(message_id).archive!
-            ToolHelpers.text_response("Message #{message_id} archived.")
-          end
+        ) do |message_id:|
+          Message.find(message_id).archive!
+          ToolHelpers.text_response("Message #{message_id} archived.")
         end
 
-        ToolHelpers.define_tool(
+        ToolHelpers.account_tool(
           server,
           name: 'gmail_label_message',
           capability: 'gmail.modify_labels',
@@ -110,18 +96,15 @@ module GMCP
           properties: {
             message_id:       { type: 'string' },
             add_label_ids:    { type: 'array', items: { type: 'string' }, description: 'Label IDs to add' },
-            remove_label_ids: { type: 'array', items: { type: 'string' }, description: 'Label IDs to remove' },
-            **ToolHelpers::ACCOUNT_PARAM
+            remove_label_ids: { type: 'array', items: { type: 'string' }, description: 'Label IDs to remove' }
           },
           required: ['message_id']
-        ) do |message_id:, add_label_ids: [], remove_label_ids: [], account: nil|
-          GMCP::Server.with_account(account) do
-            Message.find(message_id).modify!(addLabelIds: add_label_ids, removeLabelIds: remove_label_ids)
-            ToolHelpers.text_response("Labels updated on #{message_id}.")
-          end
+        ) do |message_id:, add_label_ids: [], remove_label_ids: []|
+          Message.find(message_id).modify!(addLabelIds: add_label_ids, removeLabelIds: remove_label_ids)
+          ToolHelpers.text_response("Labels updated on #{message_id}.")
         end
 
-        ToolHelpers.define_tool(
+        ToolHelpers.account_tool(
           server,
           name: 'gmail_send',
           capability: 'gmail.send',
@@ -129,18 +112,15 @@ module GMCP
           properties: {
             to:      { type: 'string', description: 'Recipient email address' },
             subject: { type: 'string' },
-            body:    { type: 'string', description: 'Plain-text message body' },
-            **ToolHelpers::ACCOUNT_PARAM
+            body:    { type: 'string', description: 'Plain-text message body' }
           },
           required: ['to', 'subject', 'body']
-        ) do |to:, subject:, body:, account: nil|
-          GMCP::Server.with_account(account) do
-            Message.send_message(to: to, subject: subject, body: body)
-            ToolHelpers.text_response("Message sent to #{to}.")
-          end
+        ) do |to:, subject:, body:|
+          Message.send_message(to: to, subject: subject, body: body)
+          ToolHelpers.text_response("Message sent to #{to}.")
         end
 
-        ToolHelpers.define_tool(
+        ToolHelpers.account_tool(
           server,
           name: 'gmail_create_draft',
           capability: 'gmail.send',
@@ -148,33 +128,27 @@ module GMCP
           properties: {
             to:      { type: 'string' },
             subject: { type: 'string' },
-            body:    { type: 'string' },
-            **ToolHelpers::ACCOUNT_PARAM
+            body:    { type: 'string' }
           },
           required: ['to', 'subject', 'body']
-        ) do |to:, subject:, body:, account: nil|
-          GMCP::Server.with_account(account) do
-            Draft.create_draft(to: to, subject: subject, body: body)
-            ToolHelpers.text_response('Draft created.')
-          end
+        ) do |to:, subject:, body:|
+          Draft.create_draft(to: to, subject: subject, body: body)
+          ToolHelpers.text_response('Draft created.')
         end
 
-        ToolHelpers.define_tool(
+        ToolHelpers.account_tool(
           server,
           name: 'gmail_reply',
           capability: 'gmail.send',
           description: 'Reply to a Gmail message',
           properties: {
             message_id: { type: 'string' },
-            body:       { type: 'string', description: 'Reply body (plain text)' },
-            **ToolHelpers::ACCOUNT_PARAM
+            body:       { type: 'string', description: 'Reply body (plain text)' }
           },
           required: ['message_id', 'body']
-        ) do |message_id:, body:, account: nil|
-          GMCP::Server.with_account(account) do
-            Message.find(message_id).reply!(body: body)
-            ToolHelpers.text_response('Reply sent.')
-          end
+        ) do |message_id:, body:|
+          Message.find(message_id).reply!(body: body)
+          ToolHelpers.text_response('Reply sent.')
         end
       end
 
@@ -183,46 +157,40 @@ module GMCP
       # One request for up to 1000 messages. Without these, acting on a
       # triage result means one round trip per message.
       def self.register_bulk(server)
-        ToolHelpers.define_tool(
+        ToolHelpers.account_tool(
           server,
           name: 'gmail_batch_archive',
           capability: 'gmail.modify_labels',
           description: 'Archive many messages at once (removes INBOX). Up to 1000 ids per call. Reversible.',
           properties: {
-            message_ids: { type: 'array', items: { type: 'string' }, description: 'Message IDs to archive' },
-            **ToolHelpers::ACCOUNT_PARAM
+            message_ids: { type: 'array', items: { type: 'string' }, description: 'Message IDs to archive' }
           },
           required: ['message_ids']
-        ) do |message_ids:, account: nil|
-          GMCP::Server.with_account(account) do
-            Tools.batching(message_ids) do |ids|
-              Message.batch_archive(ids: ids)
-              "Archived #{ids.length} message(s)."
-            end
+        ) do |message_ids:|
+          Tools.batching(message_ids) do |ids|
+            Message.batch_archive(ids: ids)
+            "Archived #{ids.length} message(s)."
           end
         end
 
-        ToolHelpers.define_tool(
+        ToolHelpers.account_tool(
           server,
           name: 'gmail_batch_trash',
           capability: 'gmail.trash',
           description: 'Move many messages to trash at once. Up to 1000 ids per call. ' \
                        'Recoverable for 30 days, after which Gmail deletes them permanently.',
           properties: {
-            message_ids: { type: 'array', items: { type: 'string' }, description: 'Message IDs to trash' },
-            **ToolHelpers::ACCOUNT_PARAM
+            message_ids: { type: 'array', items: { type: 'string' }, description: 'Message IDs to trash' }
           },
           required: ['message_ids']
-        ) do |message_ids:, account: nil|
-          GMCP::Server.with_account(account) do
-            Tools.batching(message_ids) do |ids|
-              Message.batch_trash(ids: ids)
-              "Moved #{ids.length} message(s) to trash. Recoverable for 30 days."
-            end
+        ) do |message_ids:|
+          Tools.batching(message_ids) do |ids|
+            Message.batch_trash(ids: ids)
+            "Moved #{ids.length} message(s) to trash. Recoverable for 30 days."
           end
         end
 
-        ToolHelpers.define_tool(
+        ToolHelpers.account_tool(
           server,
           name: 'gmail_batch_modify',
           capability: 'gmail.modify_labels',
@@ -230,45 +198,39 @@ module GMCP
           properties: {
             message_ids:      { type: 'array', items: { type: 'string' } },
             add_label_ids:    { type: 'array', items: { type: 'string' }, description: 'Label IDs to add' },
-            remove_label_ids: { type: 'array', items: { type: 'string' }, description: 'Label IDs to remove' },
-            **ToolHelpers::ACCOUNT_PARAM
+            remove_label_ids: { type: 'array', items: { type: 'string' }, description: 'Label IDs to remove' }
           },
           required: ['message_ids']
-        ) do |message_ids:, add_label_ids: [], remove_label_ids: [], account: nil|
-          GMCP::Server.with_account(account) do
-            if add_label_ids.empty? && remove_label_ids.empty?
-              next ToolHelpers.text_response('Nothing to do: no labels to add or remove.')
-            end
-            Tools.batching(message_ids) do |ids|
-              Message.batch_modify(ids: ids, add_label_ids: add_label_ids, remove_label_ids: remove_label_ids)
-              "Updated labels on #{ids.length} message(s)."
-            end
+        ) do |message_ids:, add_label_ids: [], remove_label_ids: []|
+          if add_label_ids.empty? && remove_label_ids.empty?
+            next ToolHelpers.text_response('Nothing to do: no labels to add or remove.')
+          end
+          Tools.batching(message_ids) do |ids|
+            Message.batch_modify(ids: ids, add_label_ids: add_label_ids, remove_label_ids: remove_label_ids)
+            "Updated labels on #{ids.length} message(s)."
           end
         end
       end
 
       # ── attachments ─────────────────────────────────────────────────────
       def self.register_attachments(server)
-        ToolHelpers.define_tool(
+        ToolHelpers.account_tool(
           server,
           name: 'gmail_list_attachments',
           capability: 'gmail.read',
           description: 'List the attachments on a message (filename, type, size, and the id needed to download it).',
           properties: {
-            message_id: { type: 'string' },
-            **ToolHelpers::ACCOUNT_PARAM
+            message_id: { type: 'string' }
           },
           required: ['message_id']
-        ) do |message_id:, account: nil|
-          GMCP::Server.with_account(account) do
-            found = Message.attachments(message_id)
-            ToolHelpers.list_response(found, empty_message: 'No attachments on this message.') do |a|
-              "#{a[:attachment_id]}  #{a[:filename]}  (#{a[:mime_type]}, #{a[:size]} bytes)"
-            end
+        ) do |message_id:|
+          found = Message.attachments(message_id)
+          ToolHelpers.list_response(found, empty_message: 'No attachments on this message.') do |a|
+            "#{a[:attachment_id]}  #{a[:filename]}  (#{a[:mime_type]}, #{a[:size]} bytes)"
           end
         end
 
-        ToolHelpers.define_tool(
+        ToolHelpers.account_tool(
           server,
           name: 'gmail_download_attachment',
           capability: 'gmail.download',
@@ -277,69 +239,60 @@ module GMCP
             message_id:    { type: 'string' },
             attachment_id: { type: 'string' },
             dest_dir:      { type: 'string', description: 'Existing directory to write into. Required — there is no default.' },
-            filename:      { type: 'string', description: 'Override the filename. Defaults to the name on the attachment.' },
-            **ToolHelpers::ACCOUNT_PARAM
+            filename:      { type: 'string', description: 'Override the filename. Defaults to the name on the attachment.' }
           },
           required: %w[message_id attachment_id dest_dir]
-        ) do |message_id:, attachment_id:, dest_dir:, filename: nil, account: nil|
-          GMCP::Server.with_account(account) do
-            Tools.download_attachment_to(
-              message_id: message_id, attachment_id: attachment_id,
-              dest_dir: dest_dir, filename: filename
-            )
-          end
+        ) do |message_id:, attachment_id:, dest_dir:, filename: nil|
+          Tools.download_attachment_to(
+            message_id: message_id, attachment_id: attachment_id,
+            dest_dir: dest_dir, filename: filename
+          )
         end
       end
 
       # ── unsubscribe ─────────────────────────────────────────────────────
       def self.register_unsubscribe(server)
-        ToolHelpers.define_tool(
+        ToolHelpers.account_tool(
           server,
           name: 'gmail_unsubscribe_info',
           capability: 'gmail.read',
           description: 'Show the List-Unsubscribe options a message offers, and whether one-click (RFC 8058) is supported.',
           properties: {
-            message_id: { type: 'string' },
-            **ToolHelpers::ACCOUNT_PARAM
+            message_id: { type: 'string' }
           },
           required: ['message_id']
-        ) do |message_id:, account: nil|
-          GMCP::Server.with_account(account) do
-            details = Unsubscribe.info(message_id)
-            next ToolHelpers.text_response('This message offers no List-Unsubscribe header.') if details.nil?
+        ) do |message_id:|
+          details = Unsubscribe.info(message_id)
+          next ToolHelpers.text_response('This message offers no List-Unsubscribe header.') if details.nil?
 
-            ToolHelpers.text_response([
-              "one-click (RFC 8058): #{details[:one_click] ? 'yes' : 'no'}",
-              "https:  #{details[:https] || '(none)'}",
-              "http:   #{details[:http] || '(none)'}",
-              "mailto: #{details[:mailto] || '(none)'}"
-            ].join("\n"))
-          end
+          ToolHelpers.text_response([
+            "one-click (RFC 8058): #{details[:one_click] ? 'yes' : 'no'}",
+            "https:  #{details[:https] || '(none)'}",
+            "http:   #{details[:http] || '(none)'}",
+            "mailto: #{details[:mailto] || '(none)'}"
+          ].join("\n"))
         end
 
-        ToolHelpers.define_tool(
+        ToolHelpers.account_tool(
           server,
           name: 'gmail_unsubscribe',
           capability: 'gmail.unsubscribe',
           description: 'Unsubscribe from a sender via RFC 8058 one-click, using the URL in the message\'s own ' \
                        'List-Unsubscribe header. https only. Note this confirms to the sender that the address is live.',
           properties: {
-            message_id: { type: 'string', description: 'A message from the sender you want to stop hearing from' },
-            **ToolHelpers::ACCOUNT_PARAM
+            message_id: { type: 'string', description: 'A message from the sender you want to stop hearing from' }
           },
           required: ['message_id']
-        ) do |message_id:, account: nil|
-          GMCP::Server.with_account(account) do
-            begin
-              code = Unsubscribe.one_click!(message_id)
-              ToolHelpers.text_response("Unsubscribe request accepted (HTTP #{code}).")
-            rescue Unsubscribe::NotSupported => e
-              ToolHelpers.text_response("Cannot one-click unsubscribe: #{e.message}")
-            rescue Unsubscribe::Failed => e
-              ToolHelpers.text_response("Unsubscribe failed: #{e.message}")
-            rescue StandardError => e
-              ToolHelpers.text_response("Unsubscribe error: #{e.class}: #{e.message}")
-            end
+        ) do |message_id:|
+          begin
+            code = Unsubscribe.one_click!(message_id)
+            ToolHelpers.text_response("Unsubscribe request accepted (HTTP #{code}).")
+          rescue Unsubscribe::NotSupported => e
+            ToolHelpers.text_response("Cannot one-click unsubscribe: #{e.message}")
+          rescue Unsubscribe::Failed => e
+            ToolHelpers.text_response("Unsubscribe failed: #{e.message}")
+          rescue StandardError => e
+            ToolHelpers.text_response("Unsubscribe error: #{e.class}: #{e.message}")
           end
         end
       end

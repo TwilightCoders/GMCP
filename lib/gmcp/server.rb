@@ -15,20 +15,12 @@ module GMCP
       registry.reinitialize!(account: account)
     end
 
-    # Returns nil if account is ready, or an MCP error Response if not
-    # authorized. Binds for the rest of the fiber; prefer with_account, which
-    # scopes the binding to a block.
-    def self.use_account(account)
-      msg = registry.activate(account)
-      msg && ToolHelpers.text_response(msg)
-    end
-
     # Runs the block with `account` bound for the duration, restoring whatever
     # was bound before. The binding is fiber-local, so two concurrent tool calls
     # for different accounts cannot see each other's APIs.
     def self.with_account(account, &block)
       error, result = registry.scoped(account, &block)
-      error ? ToolHelpers.text_response(error) : result
+      error ? ToolHelpers.error_response(error) : result
     end
 
     def self.build_server
@@ -56,8 +48,10 @@ module GMCP
       ) do |account: nil|
         account ||= registry.default_account
 
+        next ToolHelpers.error_response(registry.authorization_message(account)) unless registry.accounts.include?(account)
+
         unless ::File.exist?(Auth.credentials_path)
-          next ToolHelpers.text_response(
+          next ToolHelpers.error_response(
             "credentials.json not found at #{Auth.credentials_path}.\n\n" \
             "1. Go to https://console.cloud.google.com/ → APIs & Services → Credentials\n" \
             "2. Create an OAuth 2.0 Client ID (Desktop app)\n" \
@@ -65,15 +59,11 @@ module GMCP
           )
         end
 
-        begin
-          url = Auth.authorize_interactive!(account: account, on_success: ->(acct) { Server.reinitialize!(account: acct) })
-          ToolHelpers.text_response(
-            "A browser window has opened for #{account}. Complete sign-in there — tools will become available automatically once you authorize.\n\n" \
-            "If the browser did not open, use this URL manually:\n#{url}"
-          )
-        rescue => e
-          ToolHelpers.text_response("Authorization failed: #{e.class}: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
-        end
+        url = Auth.authorize_interactive!(account: account, on_success: ->(acct) { Server.reinitialize!(account: acct) })
+        ToolHelpers.text_response(
+          "A browser window has opened for #{account}. Complete sign-in there — tools will become available automatically once you authorize.\n\n" \
+          "If the browser did not open, use this URL manually:\n#{url}"
+        )
       end
     end
 

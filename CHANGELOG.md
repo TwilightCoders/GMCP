@@ -3,6 +3,41 @@
 All notable changes to this project are documented here.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Every Google call failed an hour after startup.** The access token was read
+  once when an account's APIs were built and sent unchanged thereafter. It is
+  now resolved per request from cached credentials that refresh shortly before
+  expiry, serialized so concurrent requests share one refresh.
+- **Failed API calls reported success.** A 4xx/5xx response was handed back as
+  if it were the resource, so a failed send or trash said it had worked and a
+  missing message crashed with `NoMethodError`. Errors now raise
+  `GMCP::ApiError` carrying Google's message.
+- **Tool failures were opaque.** Every tool now returns failures as an
+  `isError` response with the cause, instead of some rescuing ad hoc and the
+  rest surfacing as a bare JSON-RPC internal error.
+- **Token files were world-readable, and created for accounts never
+  authorized.** Tokens are written owner-only (`0600`, directory `0700`) and
+  atomically; existing files are tightened on first read; reading a missing
+  token no longer creates an empty file.
+- **The OAuth callback listened on every interface and had no `state`
+  check.** It now binds `127.0.0.1` on a kernel-assigned port, and ignores any
+  request not carrying the flow's `state`, so a stray or forged request can
+  neither cancel nor complete a sign-in.
+- **`gmcp_authorize` accepted any account**, binding mailboxes outside
+  `GMCP_ACCOUNTS`, and account names reached a file path unvalidated. Only
+  configured accounts are accepted, and an account must be an email address.
+- **`bin/gmcp-auth` waited out its full timeout after a failed exchange**, and
+  the callback server stopped at 300 s while the script waited 900 s. Failures
+  are now reported immediately, and the script's timeout governs both.
+
+### Removed
+
+- `Server.use_account`, `AccountRegistry#activate` and `ApiBinding.installed?`,
+  which nothing called.
+
 ## [0.4.0]
 
 ### Fixed
