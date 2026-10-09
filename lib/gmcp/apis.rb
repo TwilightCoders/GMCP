@@ -1,3 +1,5 @@
+require 'erb'
+
 module GMCP
   module Apis
     GMAIL_BASE    = 'https://gmail.googleapis.com/gmail/v1/users/me/'
@@ -7,6 +9,13 @@ module GMCP
     # Fails fast (AuthRequired, or a refresh error) when the account has no
     # usable token, then resolves the access token per request so it is
     # refreshed as it nears expiry.
+    # Joins path segments, escaping each. Calendar ids are email-like and
+    # holiday and contact calendars contain '#', which would otherwise end the
+    # path and send the request to the wrong resource.
+    def self.path(*segments)
+      segments.map { |s| ERB::Util.url_encode(s.to_s) }.join('/')
+    end
+
     def self.build_for_account(account:)
       Auth.credentials(account:)
       build(token: -> { Auth.access_token(account:) })

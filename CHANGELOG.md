@@ -32,9 +32,48 @@ This project adheres to [Semantic Versioning](https://semver.org/).
 - **`bin/gmcp-auth` waited out its full timeout after a failed exchange**, and
   the callback server stopped at 300 s while the script waited 900 s. Failures
   are now reported immediately, and the script's timeout governs both.
+- **Gmail replies did not thread.** `gmail_reply` referenced the Gmail id
+  rather than the original's `Message-ID`; it now sets `In-Reply-To` and
+  `References` correctly, answers `Reply-To`, and keeps the Gmail thread.
+- **Outgoing mail allowed header injection and mangled non-ASCII text.** Send,
+  draft and reply now share one MIME builder that refuses line breaks in header
+  values, RFC 2047-encodes non-ASCII subjects and names, and declares a UTF-8
+  body.
+- **`calendar_rsvp` always failed** — it sent a `PUT` Google rejects — while
+  reporting success. It now patches the attendee list, honors `calendar_id`,
+  and says when the account is not an attendee.
+- **Calendar ids were not URL-escaped**, so holiday and contacts calendars
+  (whose ids contain `#`) were unreachable; `calendar_get_event` ignored
+  `calendar_id`.
+- **`drive_read_file` failed on nearly every file.** Docs and Slides are now
+  exported as text and Sheets as CSV, text files come back verbatim, and binary
+  files or anything over 1 MB are refused with a reason.
+- **Every Voice tool but `voice_account` crashed**, calling an API Google has
+  retired. `voice_list` and `voice_search` are rebuilt on the current web API.
+- **Voice cookies were read from the wrong file**, expired cookies could
+  shadow live ones, a denied read crashed, and a rejected session needed a
+  restart. The sandbox container is read first, expiry is honored, a denial
+  explains Full Disk Access, and a 401/403 re-reads the cookies.
+
+### Changed
+
+- `gmail_search` returns date, sender and subject per message, fetched in
+  parallel, instead of bare ids that cost a call each to identify.
+- `gmail_list_attachments` reports a stable `part_id`, which
+  `gmail_download_attachment` accepts so files keep their names.
+- `calendar_list_events` defaults to upcoming events, shows readable start
+  times, accepts `YYYY-MM-DD` for all-day events and a `time_zone`, and
+  attendees now receive invitations.
+- `calendar_list_events`, `drive_search` and `drive_list_folder` return a
+  `page_token` when more results exist; Drive includes shared drives.
+- `voice_mark_read` takes a `thread_id` and only marks read.
 
 ### Removed
 
+- `voice_archive`, `voice_delete` and the `voice.trash` capability: their
+  requests on the current Voice API are unconfirmed, and a mutation is not
+  something to guess at.
+- The unused `Gmail::Thread` model, whose request paths were broken.
 - `Server.use_account`, `AccountRegistry#activate` and `ApiBinding.installed?`,
   which nothing called.
 

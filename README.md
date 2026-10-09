@@ -144,16 +144,17 @@ GMCP_CAPABILITIES=gmail.read,gmail.send bin/gmcp
 | `calendar.delete` | Delete an event |
 | `drive.read` | Search, list folders, read files |
 | `voice.read` | List/search Voice; report which account Safari resolves to |
-| `voice.modify` | Archive, mark read/unread |
-| `voice.trash` | Trash a Voice message |
+| `voice.modify` | Mark a conversation read |
 
 `config/capabilities.yml` is the source of truth; a spec asserts it matches the
 tools actually registered, so it cannot silently drift.
 
 ### Bulk work
 
-`gmail_search` paginates. It returns a `page_token` whenever more results exist;
-pass it back to walk a whole mailbox. In Ruby, `Message.each_page` handles the
+`gmail_search` returns one line per message (id, date, sender, subject) and
+paginates. It returns a `page_token` whenever more results exist; pass it back
+to walk a whole mailbox. `calendar_list_events`, `drive_search` and
+`drive_list_folder` page the same way. In Ruby, `Message.each_page` handles the
 cursor for you and is bounded by `max_pages` so a runaway cursor cannot spin.
 
 ```ruby
@@ -168,8 +169,8 @@ round trip per message. Gmail returns nothing per-message, so a partial failure
 is not distinguishable; re-read if you need per-message confirmation.
 
 Attachments are two steps: `gmail_list_attachments` (under `gmail.read`) gives
-you filenames and ids, `gmail_download_attachment` (under `gmail.download`)
-writes one to a directory you name. There is no default destination, the
+you filenames and `part_id`s, `gmail_download_attachment` (under
+`gmail.download`) writes one to a directory you name. There is no default destination, the
 filename is reduced to a basename so it cannot escape that directory, and an
 existing file is never overwritten.
 
@@ -237,6 +238,11 @@ row. `bin/gmcp` prints the same warning at startup for any granted capability
 whose connector ignores scoping.
 
 Call `voice_account` to observe which account that currently is.
+
+Safari keeps its cookies in its sandbox container, which macOS protects: the
+app that runs GMCP (your terminal, or the MCP client) needs **Full Disk
+Access** under System Settings → Privacy & Security, or every Voice tool
+reports that access was denied.
 
 ## Development
 

@@ -1,5 +1,3 @@
-require 'erb'
-
 module GMCP
   module Drive
     class File
@@ -88,12 +86,12 @@ module GMCP
               export = EXPORTS[mime]
               raise ArgumentError, "#{name} is a #{mime}, which cannot be exported as text" unless export
 
-              raw_get(path('files', file_id, 'export'), mimeType: export)
+              raw_get(Apis.path('files', file_id, 'export'), mimeType: export)
             else
               raise ArgumentError, "#{name} is #{mime.empty? ? 'of unknown type' : mime}, not text" unless text?(mime)
               raise ArgumentError, too_large(name, meta[:size].to_i) if meta[:size].to_i > MAX_BYTES
 
-              raw_get(path('files', file_id), alt: 'media', supportsAllDrives: true)
+              raw_get(Apis.path('files', file_id), alt: 'media', supportsAllDrives: true)
             end
 
           # Exports report no size up front.
@@ -103,7 +101,7 @@ module GMCP
         end
 
         def metadata(file_id)
-          get_raw(path('files', file_id), fields: 'id,name,mimeType,size', supportsAllDrives: true) do |parsed, _response|
+          get_raw(Apis.path('files', file_id), fields: 'id,name,mimeType,size', supportsAllDrives: true) do |parsed, _response|
             parsed[:data] || {}
           end
         end
@@ -113,10 +111,6 @@ module GMCP
         end
 
         private
-
-        def path(*segments)
-          segments.map { |s| ERB::Util.url_encode(s.to_s) }.join('/')
-        end
 
         def too_large(name, bytes)
           "#{name} is #{bytes} bytes; drive_read_file reads at most #{MAX_BYTES}"

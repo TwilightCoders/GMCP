@@ -1,5 +1,3 @@
-require 'erb'
-
 module GMCP
   module Calendar
     class Event
@@ -25,7 +23,7 @@ module GMCP
         raise ArgumentError, "this account is not an attendee of event #{id}, so it cannot RSVP" unless me
 
         me['responseStatus'] = response.to_s
-        self.class.patch_raw(self.class.path('calendars', calendar_id, 'events', id), { attendees: list })
+        self.class.patch_raw(Apis.path('calendars', calendar_id, 'events', id), { attendees: list })
       end
 
       # The start as Google reports it: dateTime for timed events, date for
@@ -37,13 +35,6 @@ module GMCP
       end
 
       class << self
-        # Calendar ids are email-like and holiday and contact calendars contain
-        # '#', which would otherwise end the path and send the request to the
-        # wrong resource.
-        def path(*segments)
-          segments.map { |s| ERB::Util.url_encode(s.to_s) }.join('/')
-        end
-
         # A YYYY-MM-DD value is an all-day event; anything else is a dateTime.
         # Google wants exactly one of date or dateTime.
         def time_field(value, time_zone: nil)
@@ -53,7 +44,7 @@ module GMCP
         end
 
         def fetch(event_id, calendar_id: 'primary')
-          get_resource(path('calendars', calendar_id, 'events', event_id))
+          get_resource(Apis.path('calendars', calendar_id, 'events', event_id))
         end
 
         def list(**options)
@@ -68,7 +59,7 @@ module GMCP
           params[:timeMax]   = time_max   if time_max
           params[:pageToken] = page_token if page_token && !page_token.to_s.empty?
 
-          get_raw(path('calendars', calendar_id, 'events'), params) do |parsed, _response|
+          get_raw(Apis.path('calendars', calendar_id, 'events'), params) do |parsed, _response|
             data = parsed[:data] || {}
             {
               events:          (data[:items] || []).map { |e| new(e) },
@@ -81,15 +72,15 @@ module GMCP
         # body, so it rides on the path. Without it Google adds attendees
         # silently and nobody is invited.
         def create_event(calendar_id: 'primary', **attrs)
-          post_raw(with_updates(path('calendars', calendar_id, 'events'), attrs), attrs)
+          post_raw(with_updates(Apis.path('calendars', calendar_id, 'events'), attrs), attrs)
         end
 
         def update_event(event_id:, calendar_id: 'primary', **attrs)
-          patch_raw(with_updates(path('calendars', calendar_id, 'events', event_id), attrs), attrs)
+          patch_raw(with_updates(Apis.path('calendars', calendar_id, 'events', event_id), attrs), attrs)
         end
 
         def delete_event(event_id:, calendar_id: 'primary')
-          delete_raw(path('calendars', calendar_id, 'events', event_id), {})
+          delete_raw(Apis.path('calendars', calendar_id, 'events', event_id), {})
         end
 
         private

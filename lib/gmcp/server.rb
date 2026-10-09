@@ -1,5 +1,10 @@
 require 'mcp'
 
+# mcp validates schemas with json-schema, which warns on every start unless
+# told to use the stdlib JSON it already has.
+require 'json-schema'
+JSON::Validator.use_multi_json = false
+
 module GMCP
   module Server
     SERVER_NAME    = 'gmcp'
